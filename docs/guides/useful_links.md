@@ -26,3 +26,8 @@ https://docs.docker.com/
 
 # Deep Learning
 
+If you have no info about deep learning, may this helps you: https://developers.google.com/machine-learning/crash-course?utm_source=chatgpt.com&hl=ko
+
+I didn't watch this site but yeah, it's from google. :>
+
+https://docs.pytorch.org/docs/stable/index.html
