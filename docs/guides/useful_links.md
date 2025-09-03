@@ -24,6 +24,10 @@ I think we should use docker to make our environments.
 
 https://docs.docker.com/
 
+I strongly recommend you to use docker **compose**.
+
+https://docs.docker.com/compose/
+
 # Deep Learning
 
 If you have no info about deep learning, may this helps you: https://developers.google.com/machine-learning/crash-course?utm_source=chatgpt.com&hl=ko
