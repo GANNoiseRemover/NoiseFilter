@@ -1,37 +1,40 @@
-# Git
+# Useful Links
 
-**Git Guide:** https://github.com/git-guides
+## Git
+
+**Git Guide:** <https://github.com/git-guides>
 
 If you don’t familiar to git, I recommend you this tools:
 
- https://www.gitkraken.com/
+ <https://www.gitkraken.com/>
 
 Gitkraken is kind of GUI front of git and it helps you utilize git.
 
 If you claim GitHub Student Pack with our university status, then you can use this program free.
 
-# Markdown
+## Markdown
 
 You can use Markdown to write pages in here.
 
 This site will help you how to write in Markdown.
 
-https://www.markdownguide.org/
+<https://www.markdownguide.org/>
 
-# Docker
+## Docker
 
 I think we should use docker to make our environments.
 
-https://docs.docker.com/
+<https://docs.docker.com/>
 
 I strongly recommend you to use docker **compose**.
 
-https://docs.docker.com/compose/
+<https://docs.docker.com/compose/>
 
-# Deep Learning
+## Deep Learning
 
-If you have no info about deep learning, may this helps you: https://developers.google.com/machine-learning/crash-course?utm_source=chatgpt.com&hl=ko
+If you have no info about deep learning, may this helps you:
+<https://developers.google.com/machine-learning/crash-course?utm_source=chatgpt.com&hl=ko>
 
 I didn't watch this site but yeah, it's from google. :>
 
-https://docs.pytorch.org/docs/stable/index.html
+<https://docs.pytorch.org/docs/stable/index.html>
