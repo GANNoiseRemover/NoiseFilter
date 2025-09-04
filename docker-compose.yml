@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  tensorflow-jupyter:
+    image: tensorflow/tensorflow:latest-jupyter
+    container_name: tensorflow-dev
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/tf/notebooks
+      - ./data:/tf/data
+      - ./models:/tf/models
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+    restart: unless-stopped
+    command: >
+      bash -c "
+        mkdir -p /tf/notebooks /tf/data /tf/models &&
+        jupyter notebook --notebook-dir=/tf/notebooks --ip=0.0.0.0 --no-browser --allow-root
+      "
+
+  tensorflow-cpu:
+    image: tensorflow/tensorflow:latest
+    container_name: tensorflow-cpu
+    volumes:
+      - ./src:/tf/src
+      - ./data:/tf/data
+      - ./models:/tf/models
+    working_dir: /tf/src
+    stdin_open: true
+    tty: true
+    profiles:
+      - cpu-only
+
+  tensorflow-gpu:
+    image: tensorflow/tensorflow:latest-gpu-jupyter
+    container_name: tensorflow-gpu
+    ports:
+      - "8889:8888"
+    volumes:
+      - ./notebooks:/tf/notebooks
+      - ./data:/tf/data
+      - ./models:/tf/models
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - JUPYTER_ENABLE_LAB=yes
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles:
+      - gpu
+    command: >
+      bash -c "
+        mkdir -p /tf/notebooks /tf/data /tf/models &&
+        jupyter notebook --notebook-dir=/tf/notebooks --ip=0.0.0.0 --no-browser --allow-root
+      "
