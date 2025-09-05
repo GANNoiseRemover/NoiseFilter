@@ -38,3 +38,11 @@ If you have no info about deep learning, may this helps you:
 I didn't watch this site but yeah, it's from google. :>
 
 <https://docs.pytorch.org/docs/stable/index.html>
+
+## About GAN
+
+<https://en.wikipedia.org/wiki/Generative_adversarial_network?utm_source=chatgpt.com>
+
+<https://greeksharifa.github.io/generative%20model/2019/03/03/GAN/?utm_source=chatgpt.com>
+
+<https://www.geeksforgeeks.org/machine-learning/basics-of-generative-adversarial-networks-gans/>

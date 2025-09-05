@@ -216,13 +216,17 @@ docker-compose top
 1. Start Docker Desktop
 2. Navigate to your project directory in PowerShell
 3. Create directories:
+
    ```powershell
    New-Item -ItemType Directory -Path notebooks, data, models, src
    ```
+
 4. Start GPU Jupyter service:
+
    ```bash
    docker-compose --profile gpu up tensorflow-gpu
    ```
+
 5. Open the provided URL in your browser
 6. Start coding with TensorFlow!
 
@@ -247,6 +251,7 @@ docker-compose top
 #### Port already in use
 
 - Change the port mapping in docker-compose.yml:
+
   ```yaml
   ports:
     - "8890:8888"  # Use different host port
@@ -278,6 +283,7 @@ This Docker Compose method provides a complete, easily manageable TensorFlow env
         mkdir -p /tf/notebooks /tf/data /tf/models &&
         jupyter notebook --notebook-dir=/tf/notebooks --ip=0.0.0.0 --no-browser --allow-root
       "
+
 ```
 
 ### Step 4: Create Directory Structure
@@ -445,13 +451,17 @@ docker-compose top
 2. Navigate to your project directory in PowerShell
 3. Create docker-compose.yml file (copy from above)
 4. Create directories:
+
    ```powershell
    New-Item -ItemType Directory -Path notebooks, data, models, src
    ```
+
 5. Start Jupyter service:
+
    ```bash
    docker-compose up tensorflow-jupyter
    ```
+
 6. Open the provided URL in your browser
 7. Start coding with TensorFlow!
 
@@ -476,10 +486,11 @@ docker-compose top
 #### Port already in use
 
 - Change the port mapping in docker-compose.yml:
-  ```yaml
-  ports:
-    - "8890:8888"  # Use different host port
-  ```
+
+```yaml
+ports:
+  - "8890:8888"  # Use different host port
+```
 
 #### GPU not detected
 
