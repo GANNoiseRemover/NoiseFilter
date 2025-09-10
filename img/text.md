@@ -1,4 +1,4 @@
-You can upload pictures into this folder!
+You can upload pictures in here!
 
 1. Take a look at use case diagram ->
    
