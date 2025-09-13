@@ -113,7 +113,8 @@ Here you can check out the USE CASE and its description for out project.
   4. User hears improved audio output.
 
 **Alternative Flows / Extensions:**
-     * Model fails to process audio -> go to "Preparation for Deliver Clean Audio" stage.
+     
+* Model fails to process audio -> go to "Preparation for Deliver Clean Audio" stage.
 
 ---
 
