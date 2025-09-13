@@ -18,7 +18,7 @@ Here you can check out the USE CASE and its description for out project.
 **Preconditions:**
 * Developers have access to audio sources.
 * Tools for recording and storing audio are ready.
-  **Postconditions:**
+**Postconditions:**
 * Training and test audio data are collected and stored in a usable format.
 **Main Flow:**
 1. Identify sources of audio recordings (various noise conditions, different speakers).
