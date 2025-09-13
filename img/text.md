@@ -65,7 +65,7 @@ Here you can check out the USE CASE and its description for out project.
 
 ---
 
-# **US3 - Evaluate Audio Quality (PESQ, STOI)
+# **US3 - Evaluate Audio Quality (PESQ, STOI)**
 **Use Case Name:** Evaluate Audio Quality
 
 **Actor:** Development Team
@@ -90,7 +90,7 @@ Here you can check out the USE CASE and its description for out project.
 
 ---
 
-## **US4 - Deploy Optimized Model (to Runtime Device)
+## **US4 - Deploy Optimized Model (to Runtime Device)**
 **Use Case Name:** Deploy Optimized Model
 
 **Actor:** Development Team
