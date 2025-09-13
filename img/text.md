@@ -86,7 +86,8 @@ Here you can check out the USE CASE and its description for out project.
   3. Signal is forwarded to the AI model for noise reduction.
 
   **Alternative Flows / Extensions:**
-     * Microphone damaged or blocked → no input captured; device alerts user.
+  
+* Microphone damaged or blocked → no input captured; device alerts user.
 
 ---
 
@@ -113,7 +114,7 @@ Here you can check out the USE CASE and its description for out project.
   4. User hears improved audio output.
 
 **Alternative Flows / Extensions:**
-     
+
 * Model fails to process audio -> go to "Preparation for Deliver Clean Audio" stage.
 
 ---
