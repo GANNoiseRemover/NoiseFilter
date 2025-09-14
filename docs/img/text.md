@@ -3,7 +3,7 @@ Here you can check out the USE CASE and its description for out project.
 # **1. USE CASE diagrams ->**
    
 ![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/docs/img/USE_CASE1.png)
-![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/img/USE_CASE2.png)
+![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/docs/img/USE_CASE2.png)
 
 ---
 # **2.USE CASE description ->**
