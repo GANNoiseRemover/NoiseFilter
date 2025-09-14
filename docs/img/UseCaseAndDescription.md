@@ -148,7 +148,7 @@ Here you can check out the USE CASE and its description for our project.
 
 ---
 
-## **US2 - Model Training & Improvement (GAN (Noise Reduction) + Autoencoder)**
+## **UC2 - Model Training & Improvement (GAN (Noise Reduction) + Autoencoder)**
 
 **Actor:** Development Team
 
@@ -175,7 +175,7 @@ Here you can check out the USE CASE and its description for our project.
 
 ---
 
-## **US3 - Evaluate Audio Quality (PESQ, STOI)**
+## **UC3 - Evaluate Audio Quality (PESQ, STOI)**
 
 **Actor:** Development Team
 
@@ -199,7 +199,7 @@ Here you can check out the USE CASE and its description for our project.
 
 ---
 
-## **US4 - Deploy Optimized Model (to Runtime Device)**
+## **UC4 - Deploy Optimized Model (to Runtime Device)**
 
 **Actor:** Development Team
 
