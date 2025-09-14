@@ -29,8 +29,7 @@ Here you can check out the USE CASE and its description for out project.
 **Main Flow**:
 
   1. User rotates potentiometer to switch ON/OFF.
-  2. Device verifies power state.
-  3. Indicator confirms the action (LED light).
+  2. Device verifies power state (confirms the action (LED)).
 
 **Alternative Flows / Extensions:**
 
@@ -87,7 +86,7 @@ Here you can check out the USE CASE and its description for out project.
 
   **Alternative Flows / Extensions:**
   
-* Microphone damaged or blocked → no input captured; device alerts user.
+* Microphone damaged or blocked → no input captured; requires maintenance.
 
 ---
 
