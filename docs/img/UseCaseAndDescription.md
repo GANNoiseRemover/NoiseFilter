@@ -109,7 +109,7 @@ Here you can check out the USE CASE and its description for out project.
 
   1. Captured audio signal is processed by deployed AI model.
   2. Noise reduction and amplification are applied.
-  3. Processed clean audio is transmitted to the speaker.
+  3. Processed clean audio is transmitted to the headphones.
   4. User hears improved audio output.
 
 **Alternative Flows / Extensions:**
