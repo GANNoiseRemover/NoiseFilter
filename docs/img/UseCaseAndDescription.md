@@ -1,4 +1,4 @@
-Here you can check out the USE CASE and its description for out project.
+Here you can check out the USE CASE and its description for our project.
 
 # **1. USE CASE diagrams ->**
    
