@@ -13,3 +13,6 @@
 * MetricGAN (and updated version MetricGAN+) https://github.com/JasonSWFu/MetricGAN ???
 -> learning on PESQ and STOI criteria
 -> real life use
+
+* CGA-MGAN(Convolution-Augmented Gated-Attention MetricGAN) https://www.mdpi.com/1099-4300/25/4/628
+  MetricGAN + CGAU 결합한 구조
