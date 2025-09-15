@@ -34,3 +34,4 @@ HiFi-GAN  [Hugging Face Model](https://huggingface.co/nvidia/tts_hifigan)
 - Uses a generator combined with multi-scale and multi-period discriminators for simultaneous model compression and speech quality.  
 - Widely used for speech restoration, text-to-speech, and noise reduction enhancement applications.
 
+RNnoisy - mentor recommendations?
