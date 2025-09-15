@@ -17,7 +17,8 @@
 * CGA-MGAN(Convolution-Augmented Gated-Attention MetricGAN) https://www.mdpi.com/1099-4300/25/4/628
   -> MetricGAN + CGAU 결합한 구조
 
-  DeepFilterNet  [GitHub Repository](https://github.com/Rikorose/DeepFilterNet)  
+
+DeepFilterNet  [GitHub Repository](https://github.com/Rikorose/DeepFilterNet)  
 - Lightweight deep filtering framework for real-time full-band (48kHz) speech noise suppression.  
 - Supports both Rust and Python with command-line tools and LADSPA plugins for real-time microphone noise suppression.  
 - Pretrained models available; works on CPU and GPU, suitable for embedded environments such as hearing aids.
