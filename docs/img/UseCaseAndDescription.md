@@ -1,9 +1,9 @@
-Here you can check out the USE CASE and its description for out project.
+Here you can check out the USE CASE and its description for our project.
 
 # **1. USE CASE diagrams ->**
    
-![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/img/USE_CASE1.png)
-![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/img/USE_CASE2.png)
+![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/docs/img/USE_CASE1.png)
+![Error](https://github.com/GANNoiseRemover/NoiseFilter/blob/main/docs/img/USE_CASE2.png)
 
 ---
 # **2.USE CASE description ->**
@@ -29,8 +29,7 @@ Here you can check out the USE CASE and its description for out project.
 **Main Flow**:
 
   1. User rotates potentiometer to switch ON/OFF.
-  2. Device verifies power state.
-  3. Indicator confirms the action (LED light).
+  2. Device verifies power state (confirms the action (LED)).
 
 **Alternative Flows / Extensions:**
 
@@ -87,7 +86,7 @@ Here you can check out the USE CASE and its description for out project.
 
   **Alternative Flows / Extensions:**
   
-* Microphone damaged or blocked → no input captured; device alerts user.
+* Microphone damaged or blocked → no input captured; requires maintenance.
 
 ---
 
@@ -110,7 +109,7 @@ Here you can check out the USE CASE and its description for out project.
 
   1. Captured audio signal is processed by deployed AI model.
   2. Noise reduction and amplification are applied.
-  3. Processed clean audio is transmitted to the speaker.
+  3. Processed clean audio is transmitted to the headphones.
   4. User hears improved audio output.
 
 **Alternative Flows / Extensions:**
@@ -149,7 +148,7 @@ Here you can check out the USE CASE and its description for out project.
 
 ---
 
-## **US2 - Model Training & Improvement (GAN (Noise Reduction) + Autoencoder)**
+## **UC2 - Model Training & Improvement (GAN (Noise Reduction) + Autoencoder)**
 
 **Actor:** Development Team
 
@@ -176,7 +175,7 @@ Here you can check out the USE CASE and its description for out project.
 
 ---
 
-## **US3 - Evaluate Audio Quality (PESQ, STOI)**
+## **UC3 - Evaluate Audio Quality (PESQ, STOI)**
 
 **Actor:** Development Team
 
@@ -200,7 +199,7 @@ Here you can check out the USE CASE and its description for out project.
 
 ---
 
-## **US4 - Deploy Optimized Model (to Runtime Device)**
+## **UC4 - Deploy Optimized Model (to Runtime Device)**
 
 **Actor:** Development Team
 
