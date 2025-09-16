@@ -46,7 +46,9 @@ Here you can check out the USE CASE and its description for our project.
   
 **Preconditions**:
 
-  * Device must be powered ON.
+  * Device is powered ON (UC0).
+  * Audio has been processed (amplified + noise-reduced).
+  * Potentiometer is functional.
     
  **Postconditions**:
 
@@ -54,9 +56,10 @@ Here you can check out the USE CASE and its description for our project.
     
   **Main Flow**:
 
-  1. User rotates potentiometer to adjust gain.
-  2. Device modifies amplification parameter.
-  3. Clean audio is delivered at adjusted volume.
+  1. User rotates the potentiometer to increase or decrease volume.
+  2. Device reads the potentiometer value and adjusts the output gain accordingly.
+  3. The clean audio signal (already noise-reduced and amplified) is updated in real time.
+  4. User hears the clean audio at the chosen volume level.
 
  **Alternative Flows / Extensions:**
 * Potentiometer malfunction → volume remains unchanged.
