@@ -5,6 +5,7 @@
 - **Clean audio**: recorded in parallel from a phone or another “reference” system under the same conditions (so that the signals match).  
 - **Audio format**: WAV, sampling rate 16 kHz, 16-bit PCM.  
   - WAV is preferred because it is uncompressed (unlike MP3).
+
     **how much audio we gonna use? whats the length for that audio? one for ~30 min and one for ~2 hours?**
 
 ## 2. Preprocessing and Data Loading
