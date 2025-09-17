@@ -4,7 +4,8 @@
 - **Noisy audio**: recorded through a microphone connected to the hearing aid prototype while playing sound (e.g., from a laptop speaker).  
 - **Clean audio**: recorded in parallel from a phone or another “reference” system under the same conditions (so that the signals match).  
 - **Audio format**: WAV, sampling rate 16 kHz, 16-bit PCM.  
-  - WAV is preferred because it is uncompressed (unlike MP3).  
+  - WAV is preferred because it is uncompressed (unlike MP3).
+    **how much audio we gonna use? whats the length for that audio? one for ~30 min and one for ~2 hours?**
 
 ## 2. Preprocessing and Data Loading
 - Audio files are separated into **clean** and **noisy** folders.  
