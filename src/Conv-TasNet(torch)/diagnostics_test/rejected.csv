@@ -1,0 +1,4 @@
+clean_path,noisy_path,reason
+/workspace/dataset/test/clean/0014.wav,/workspace/dataset/test/noisy/0014.wav,gcc_max=0.311 improve=-1.264 delay_ms=7.81
+/workspace/dataset/test/clean/0032.wav,/workspace/dataset/test/noisy/0032.wav,gcc_max=0.300 improve=-0.995 delay_ms=7.81
+/workspace/dataset/test/clean/0089.wav,/workspace/dataset/test/noisy/0089.wav,gcc_max=0.269 improve=-0.424 delay_ms=7.88

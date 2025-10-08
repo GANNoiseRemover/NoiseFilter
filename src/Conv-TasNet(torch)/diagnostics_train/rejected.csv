@@ -1,0 +1,19 @@
+clean_path,noisy_path,reason
+/workspace/dataset/train/clean/0007.wav,/workspace/dataset/train/noisy/0007.wav,gcc_max=0.335 improve=-0.059 delay_ms=0.06
+/workspace/dataset/train/clean/0008.wav,/workspace/dataset/train/noisy/0008.wav,gcc_max=0.319 improve=-0.041 delay_ms=0.06
+/workspace/dataset/train/clean/0041.wav,/workspace/dataset/train/noisy/0041.wav,gcc_max=0.192 improve=-0.360 delay_ms=0.12
+/workspace/dataset/train/clean/0043.wav,/workspace/dataset/train/noisy/0043.wav,gcc_max=0.218 improve=-0.597 delay_ms=7.81
+/workspace/dataset/train/clean/0049.wav,/workspace/dataset/train/noisy/0049.wav,gcc_max=0.067 improve=0.325 delay_ms=7.88
+/workspace/dataset/train/clean/0056.wav,/workspace/dataset/train/noisy/0056.wav,gcc_max=0.310 improve=-0.882 delay_ms=7.88
+/workspace/dataset/train/clean/0058.wav,/workspace/dataset/train/noisy/0058.wav,gcc_max=0.170 improve=-0.104 delay_ms=7.81
+/workspace/dataset/train/clean/0059.wav,/workspace/dataset/train/noisy/0059.wav,gcc_max=0.229 improve=-0.084 delay_ms=0.06
+/workspace/dataset/train/clean/0065.wav,/workspace/dataset/train/noisy/0065.wav,gcc_max=0.129 improve=-0.042 delay_ms=0.12
+/workspace/dataset/train/clean/0073.wav,/workspace/dataset/train/noisy/0073.wav,gcc_max=0.146 improve=-0.070 delay_ms=0.06
+/workspace/dataset/train/clean/0077.wav,/workspace/dataset/train/noisy/0077.wav,gcc_max=0.112 improve=-0.004 delay_ms=0.06
+/workspace/dataset/train/clean/0081.wav,/workspace/dataset/train/noisy/0081.wav,gcc_max=0.185 improve=-0.394 delay_ms=7.88
+/workspace/dataset/train/clean/0087.wav,/workspace/dataset/train/noisy/0087.wav,gcc_max=0.145 improve=-0.061 delay_ms=10.75
+/workspace/dataset/train/clean/0088.wav,/workspace/dataset/train/noisy/0088.wav,gcc_max=0.180 improve=-1.353 delay_ms=7.81
+/workspace/dataset/train/clean/0092.wav,/workspace/dataset/train/noisy/0092.wav,gcc_max=0.258 improve=-0.687 delay_ms=7.81
+/workspace/dataset/train/clean/0095.wav,/workspace/dataset/train/noisy/0095.wav,gcc_max=0.119 improve=-0.121 delay_ms=7.81
+/workspace/dataset/train/clean/0099.wav,/workspace/dataset/train/noisy/0099.wav,gcc_max=0.158 improve=-0.065 delay_ms=0.12
+/workspace/dataset/train/clean/0100.wav,/workspace/dataset/train/noisy/0100.wav,gcc_max=0.221 improve=-0.676 delay_ms=7.75

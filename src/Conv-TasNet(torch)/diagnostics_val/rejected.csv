@@ -1,0 +1,2 @@
+clean_path,noisy_path,reason
+/workspace/dataset/validation/clean/0091.wav,/workspace/dataset/validation/noisy/0091.wav,gcc_max=0.214 improve=-3.001 delay_ms=7.75

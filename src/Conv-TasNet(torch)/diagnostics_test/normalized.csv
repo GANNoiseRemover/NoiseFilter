@@ -1,0 +1,8 @@
+clean_path,noisy_path
+/workspace/diagnostics_test/normalized/clean/0004.wav,/workspace/diagnostics_test/normalized/noisy/0004.wav
+/workspace/diagnostics_test/normalized/clean/0015.wav,/workspace/diagnostics_test/normalized/noisy/0015.wav
+/workspace/diagnostics_test/normalized/clean/0018.wav,/workspace/diagnostics_test/normalized/noisy/0018.wav
+/workspace/diagnostics_test/normalized/clean/0029.wav,/workspace/diagnostics_test/normalized/noisy/0029.wav
+/workspace/diagnostics_test/normalized/clean/0036.wav,/workspace/diagnostics_test/normalized/noisy/0036.wav
+/workspace/diagnostics_test/normalized/clean/0072.wav,/workspace/diagnostics_test/normalized/noisy/0072.wav
+/workspace/diagnostics_test/normalized/clean/0084.wav,/workspace/diagnostics_test/normalized/noisy/0084.wav

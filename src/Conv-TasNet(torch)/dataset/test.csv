@@ -1,0 +1,11 @@
+clean_path,noisy_path
+/workspace/dataset/test/clean/0004.wav,/workspace/dataset/test/noisy/0004.wav
+/workspace/dataset/test/clean/0014.wav,/workspace/dataset/test/noisy/0014.wav
+/workspace/dataset/test/clean/0015.wav,/workspace/dataset/test/noisy/0015.wav
+/workspace/dataset/test/clean/0018.wav,/workspace/dataset/test/noisy/0018.wav
+/workspace/dataset/test/clean/0029.wav,/workspace/dataset/test/noisy/0029.wav
+/workspace/dataset/test/clean/0032.wav,/workspace/dataset/test/noisy/0032.wav
+/workspace/dataset/test/clean/0036.wav,/workspace/dataset/test/noisy/0036.wav
+/workspace/dataset/test/clean/0072.wav,/workspace/dataset/test/noisy/0072.wav
+/workspace/dataset/test/clean/0084.wav,/workspace/dataset/test/noisy/0084.wav
+/workspace/dataset/test/clean/0089.wav,/workspace/dataset/test/noisy/0089.wav

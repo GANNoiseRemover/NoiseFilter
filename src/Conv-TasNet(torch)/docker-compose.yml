@@ -1,0 +1,18 @@
+services:
+  simplemodel:
+    image: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
+    container_name: simplemodel
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    stdin_open: true
+    tty: true

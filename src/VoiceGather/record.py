@@ -12,12 +12,12 @@ MIC_A_INDEX = 1  # 🎤 첫 번째 마이크의 인덱스 번호
 MIC_B_INDEX = 4  # 🎤 두 번째 마이크의 인덱스 번호
 
 DURATION = 60         # 한 번에 녹음할 시간 (초)
-REPEAT = 15           # 반복 횟수
+REPEAT = 150           # 반복 횟수
 SAMPLE_RATE = 44100   # 샘플링 속도 (Hz)
 CHANNELS = 1          # 채널 수 (1 = 모노, 2 = 스테레오)
-SAVE_DIR = r'kesa_house_with_fan'  # 저장할 폴더명 (예: recordings)
-FILENAME_FORMAT_A = 'micA_{:02d}.wav'  # 첫 번째 마이크 파일명 포맷
-FILENAME_FORMAT_B = 'micB_{:02d}.wav'  # 두 번째 마이크 파일명 포맷
+SAVE_DIR = r'soundfromAIHub1'  # 저장할 폴더명 (예: recordings)
+FILENAME_FORMAT_A = 'micA_{:04d}.wav'  # 첫 번째 마이크 파일명 포맷
+FILENAME_FORMAT_B = 'micB_{:04d}.wav'  # 두 번째 마이크 파일명 포맷
 # --------------------
 
 # 각 스레드의 녹음 결과를 저장할 딕셔너리
