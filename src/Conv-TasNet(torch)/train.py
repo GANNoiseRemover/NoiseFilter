@@ -166,7 +166,15 @@ def main(config):
     optimizer_g = torch.optim.Adam(model_g.parameters(), lr=lr_g, weight_decay=1e-4)
     optimizer_d = torch.optim.Adam(model_d.parameters(), lr=lr_d)
     scheduler_g = None
-    if config.get("lr_scheduler", {}).get("type") == "plateau":
+    lr_scheduler_type = config.get("lr_scheduler", {}).get("type")
+    if lr_scheduler_type == "cosine":
+        s = config["lr_scheduler"]
+        scheduler_g = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_g,
+            T_max=s.get("T_max", config["epochs"]),
+            eta_min=s.get("eta_min", 1e-6)
+        )
+    elif lr_scheduler_type == "plateau":
         s = config["lr_scheduler"]
         scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_g, mode='min', factor=s.get("factor", 0.5), patience=s.get("patience", 3),
@@ -373,9 +381,12 @@ def main(config):
         avg_val_loss = total_val_loss / len(val_loader); avg_pesq = total_pesq / len(val_loader)
         avg_stoi = total_stoi / len(val_loader); avg_si_sdr = total_si_sdr / len(val_loader)
         
-        # 스케줄러 스텝 (Plateau)
+        # 스케줄러 스텝
         if scheduler_g is not None:
-            scheduler_g.step(avg_val_loss)
+            if lr_scheduler_type == "cosine":
+                scheduler_g.step()
+            else:
+                scheduler_g.step(avg_val_loss)
 
         # 현재 LR 출력
         current_lr = optimizer_g.param_groups[0]['lr']
