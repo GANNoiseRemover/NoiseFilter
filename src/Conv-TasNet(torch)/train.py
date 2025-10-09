@@ -20,15 +20,15 @@ from utils import (set_seed, si_sdr_loss_shift_invariant, calculate_metrics, sav
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_realdata_v3",
+    "output_root": "convtasnet_additionalAugmented_finetune",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
     "val_csv": "diagnostics_val/normalized.csv",           # 직접 지정 시 사용. 예: "diagnostics_val/normalized.csv"
     "resume_checkpoint": "",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
-    "fine_tuning_checkpoint": "", # 예: "path/to/pretrained_model.pth"
+    "fine_tuning_checkpoint": "convtasnet_additionalAugmented/checkpoints/checkpoint_epoch_20.pth", # 예: "path/to/pretrained_model.pth"
     # --- 파인튜닝 전용 옵션 ---
-    "is_finetune": False,             # 파인튜닝 모드 활성화
+    "is_finetune": True,             # 파인튜닝 모드 활성화
     "freeze_encoder_epochs": 1,       # 초반 N 에포크 encoder/bottleneck 동결
     "disable_d_epochs": 4,            # 초반 N 에포크 Discriminator/Adv 비활성화
     "disable_perc_epochs": 2,         # 초반 N 에포크 Perceptual loss 비활성화(작은 데이터 안정화)

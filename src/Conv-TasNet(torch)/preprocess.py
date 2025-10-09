@@ -9,7 +9,7 @@ import numpy as np
 # --- 설정 ---
 # 실제 데이터셋이 위치한 루트 디렉토리를 지정하세요.
 # 예: './speech_data'
-DATASET_ROOT = 'dataset' 
+DATASET_ROOT = 'dataset_korean_pretrain' 
 # 생성된 CSV 파일이 저장될 위치를 지정하세요.
 OUTPUT_DIR = DATASET_ROOT 
 SAMPLE_RATE = 16000
