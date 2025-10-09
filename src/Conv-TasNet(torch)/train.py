@@ -20,7 +20,7 @@ from utils import (set_seed, si_sdr_loss_shift_invariant, calculate_metrics, sav
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_realdata_v3",
+    "output_root": "convtasnet_cosineannealinglr",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
@@ -81,12 +81,10 @@ CONFIG = {
     "lambda_stft": 1.0,  # MR-STFT loss 가중치
     "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치
 
-    # --- 스케줄러 ---
     "lr_scheduler": {
-        "type": "plateau",  # 'plateau'만 지원
-        "factor": 0.5,
-        "patience": 3,
-        "min_lr": 1e-6
+        "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정
+        "T_max": 100,          # 반복 주기(일반적으로 전체 에포크 수와 동일하게 설정)
+        "eta_min": 1e-6        # 최소 학습률
     },
 
     # --- 로깅 및 저장 ---
