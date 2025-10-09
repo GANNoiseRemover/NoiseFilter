@@ -1,7 +1,7 @@
 services:
-  simplemodel:
+  convtasnet:
     image: pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
-    container_name: simplemodel
+    container_name: convtasnet
     working_dir: /workspace
     volumes:
       - .:/workspace
