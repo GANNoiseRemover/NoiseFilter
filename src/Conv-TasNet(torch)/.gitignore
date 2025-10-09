@@ -1,13 +1,16 @@
-./dataset/
-./dataset_korean_pretrain/
 *.wav
 *.pcm
 *.txt
-./output_korean_pretrain/
 *.v2
-
-*.png
+*.npy
 *.pth
+*.zip
+*.h5
+*.keras
+
+dataset/
+convtasnet_*/
+diagnostics_*/
 
 
 __pycache__/
