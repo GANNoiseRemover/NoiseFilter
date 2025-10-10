@@ -10,6 +10,19 @@ from concurrent.futures import ThreadPoolExecutor
 import warnings
 from typing import Tuple
 
+# --- TorchMetrics (SI-SDR) ---
+_HAS_TORCHMETRICS = True
+try:
+    # Prefer functional API for loss (avoids metric state accumulation)
+    from torchmetrics.functional.audio import scale_invariant_signal_distortion_ratio as _tm_si_sdr
+except Exception:
+    try:
+        # Fallback older alias
+        from torchmetrics.functional.audio import si_sdr as _tm_si_sdr
+    except Exception:
+        print("정보: torchmetrics의 SI-SDR 함수를 불러올 수 없습니다. 로컬 구현으로 대체합니다.")
+        _HAS_TORCHMETRICS = False
+
 def set_seed(seed):
     """시드 고정으로 재현성 확보"""
     torch.manual_seed(seed)
@@ -85,6 +98,44 @@ def si_sdr_loss_shift_invariant(preds: torch.Tensor, target: torch.Tensor, max_s
             best_loss = torch.minimum(best_loss, loss)
 
     return best_loss if best_loss is not None else si_sdr_loss(preds, target, epsilon)
+
+
+def si_sdr_loss_torchmetrics(preds: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    """
+    SI-SDR loss using TorchMetrics (differentiable functional).
+    Returns negative SI-SDR (mean over batch) to be minimized.
+    - Supports inputs of shape (B, T) or (B, 1, T).
+    - Aligns lengths and clamps to [-1, 1] for numerical stability.
+    If torchmetrics is unavailable, falls back to the local implementation.
+    """
+    # Squeeze channel dim if provided
+    if preds.dim() == 3 and preds.size(1) == 1:
+        preds = preds.squeeze(1)
+    if target.dim() == 3 and target.size(1) == 1:
+        target = target.squeeze(1)
+
+    # Ensure 2D (B, T)
+    if preds.dim() == 1:
+        preds = preds[None, :]
+    if target.dim() == 1:
+        target = target[None, :]
+
+    # Length align and clamp
+    min_len = min(preds.shape[-1], target.shape[-1])
+    preds = torch.nan_to_num(preds[..., :min_len].float().clamp(-1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0)
+    target = torch.nan_to_num(target[..., :min_len].float().clamp(-1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0)
+
+    if _HAS_TORCHMETRICS:
+        try:
+            si_sdr_vals = _tm_si_sdr(preds, target)  # shape: (B,) or scalar depending on version
+            loss = -si_sdr_vals.mean()
+            # guard
+            loss = torch.nan_to_num(loss, nan=0.0, posinf=0.0, neginf=0.0)
+            return loss
+        except Exception:
+            pass
+    # Fallback to local stable SI-SDR if torchmetrics is not available or failed
+    return si_sdr_loss(preds, target)
 
 def _compute_single_metric(clean, denoised, sr):
     """단일 샘플에 대한 PESQ, STOI, SI-SDR 계산 (병렬 처리를 위함)"""
@@ -203,7 +254,7 @@ def load_checkpoint(checkpoint_path, model_g, model_d=None, optimizer_g=None, op
         except Exception:
             print("[경고] Discriminator 옵티마이저 상태 로드 실패, 새로 초기화합니다.")
     
-    print(f"'{checkpoint_path}'에서 체크포인트 로드 완료. Epoch {start_epoch}부터 학습 재개.")
+    print(f"'{checkpoint_path}'에서 체크포인트 로드 완료. Epoch {start_epoch}.")
     return start_epoch, best_val_loss
 
 def save_sample_audios(output_dir, filename_base, clean, noisy, denoised, sr):
