@@ -75,7 +75,7 @@ CONFIG = {
     "use_stft": True,    # MR-STFT 손실 사용 여부
     "use_perc": True,    # Perceptual(Log-Mel) 손실 사용 여부
 
-    "lambda_adv": 0.005,  # GAN 손실 가중치
+    "lambda_adv": 0.001,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
     "lambda_stft": 1.0,  # MR-STFT loss 가중치
