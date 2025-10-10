@@ -11,6 +11,7 @@
 dataset/
 convtasnet_*/
 diagnostics_*/
+dataset_korean_pretrain/
 
 
 __pycache__/
