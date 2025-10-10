@@ -9,9 +9,9 @@ from tqdm import tqdm
 # --- 프로젝트 파일 임포트 ---
 from model import ConvTasNet, Discriminator
 from dataset import DenoisingDataset
-from utils import (set_seed, si_sdr_loss_shift_invariant, calculate_metrics, save_checkpoint, 
+from utils import (set_seed, calculate_metrics, save_checkpoint, 
                    load_checkpoint, save_sample_audios, save_spectrogram_images, MRSTFTLoss,
-                   LogMelPerceptualLoss, smooth_labels)
+                   LogMelPerceptualLoss, smooth_labels, si_sdr_loss_torchmetrics)
 # preprocess.py는 직접 임포트하지 않고, 스크립트로 별도 실행합니다.
 
 # ==============================================================================
@@ -174,7 +174,8 @@ def main(config):
         )
     
     adversarial_loss = nn.MSELoss().to(device)
-    reconstruction_loss = si_sdr_loss_shift_invariant
+    # Prefer torchmetrics SI-SDR for stable gradients; keep shift-invariant available if needed
+    reconstruction_loss = si_sdr_loss_torchmetrics
     mrstft_loss = MRSTFTLoss().to(device)
     perc_loss_fn = LogMelPerceptualLoss(sr=config['sample_rate']).to(device)
 
