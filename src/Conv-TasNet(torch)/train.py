@@ -20,7 +20,7 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_cosineannealinglr",
+    "output_root": "convtasnet_lightweighted",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
@@ -61,12 +61,12 @@ CONFIG = {
 
     # --- 모델 구조 ---
     "model_params": {
-        "enc_dim": 512,
+        "enc_dim": 128,
         "win_len": 16,
         "num_spk": 1,
-        "num_layers": 3,
+        "num_layers": 1,
         "num_blocks": 8,
-        "conv_channels": 512,
+        "conv_channels": 128,
         "kernel_size": 3,
     },
 
@@ -157,6 +157,16 @@ def main(config):
             model_g = torch.compile(model_g)
         except Exception as e:
             print(f"torch.compile(model_g) 적용 중 오류 발생: {e}. 일반 모드로 계속합니다.")
+    # --- 모델 파라미터 개수 출력 ---
+    def _count_parameters(m):
+        """총 파라미터 수와 학습 가능한(gradient를 계산하는) 파라미터 수를 반환합니다."""
+        total = sum(p.numel() for p in m.parameters())
+        trainable = sum(p.numel() for p in m.parameters() if p.requires_grad)
+        return total, trainable
+
+    tot_g, train_g = _count_parameters(model_g)
+    tot_d, train_d = _count_parameters(model_d)
+    print(f"Model parameter counts - Generator: total={tot_g:,}, trainable={train_g:,}; Discriminator: total={tot_d:,}, trainable={train_d:,}")
 
 
     lr_g = config['learning_rate_g_ft'] if config.get('is_finetune') else config['learning_rate_g']

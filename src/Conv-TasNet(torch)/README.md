@@ -18,13 +18,13 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-1. 의존성 설치
+2. 의존성 설치
 
 ```powershell
 pip install -r .\requirements.txt
 ```
 
-1. 데이터 준비
+3. 데이터 준비
 
 - 이미 `dataset/`에 `train/validation/test` 폴더 구조와 `clean/noisy` 짝이 있다면 4로 이동
 - 없다면 `preprocess.py`가 시연용 더미 데이터를 생성하고 CSV(filelist)를 만들어 줍니다.
@@ -35,7 +35,7 @@ python .\preprocess.py
 
 실행 후 `dataset/train.csv, validation.csv, test.csv`가 생성됩니다.
 
-1. (권장) 데이터 진단/정렬/정규화
+4. (권장) 데이터 진단/정렬/정규화
 
 - CSV를 기반으로 진단 리포트 및 정규화/정렬된 복사본을 생성할 수 있습니다.
 - 예시(훈련/검증/테스트 각각 실행):
@@ -62,7 +62,7 @@ python .\diagnose_dataset.py --csv dataset\test.csv --sr 16000 `
 
 결과물: `diagnostics_*/diagnostics_report.csv`, `summary.json`, 히스토그램 이미지, 선택적으로 `normalized/`와 `aligned/` 폴더 및 해당 CSV
 
-1. 학습
+5. 학습
 
 ```powershell
 python .\train.py
@@ -73,7 +73,7 @@ python .\train.py
   - val:   `diagnostics_val/normalized.csv`
 - 위 진단 단계를 생략했다면 `CONFIG`의 `train_csv`, `val_csv`를 `dataset/train.csv`, `dataset/validation.csv`로 바꾸세요.
 
-1. 테스트(베스트 모델)
+6. 테스트(베스트 모델)
 
 ```powershell
 python .\test.py
@@ -159,14 +159,6 @@ dataset/
 - 기본적으로 `output_root/checkpoints/best_model.pth` 로드
 - 키 불일치 시 진단을 출력하고, `allow_partial_load=True`로 일부 가중치만 로드도 가능(권장X)
 - 테스트는 배치 1, 전체 길이 단위로 실행하며, 처음 몇 개 샘플의 WAV/스펙트럼 이미지를 저장합니다.
-
-## 폴더 기반 빠른 평가(`dataseteval.py`)
-
-`clean/` vs `noisy/`(동일 파일명) 폴더 쌍에 대해 PESQ/STOI 평균을 병렬 계산합니다.
-
-```powershell
-python .\dataseteval.py
-```
 
 출력 예)
 
