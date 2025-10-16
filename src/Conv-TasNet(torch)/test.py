@@ -87,6 +87,10 @@ def test(config):
     total_pesq_orig, total_stoi_orig, total_si_sdr_orig = 0, 0, 0
     
     use_amp = config.get('use_amp', True) and device.type == 'cuda'
+    # Test-time augmentation: time-reversal averaging and optional overlap-add
+    # 기본적으로 TTA는 비활성화합니다(옵션으로 켤 수 있음)
+    use_tta = config.get('use_tta', False)
+    use_overlap_add = config.get('use_overlap_add', False)
     with torch.no_grad():
         progress_bar = tqdm(test_loader, desc="🧪 테스트 데이터로 모델 평가 중")
         for i, (noisy, clean) in enumerate(progress_bar):
@@ -96,8 +100,46 @@ def test(config):
             if noisy.dim() == 2:
                 noisy = noisy.unsqueeze(1)
             # AMP 추론 적용 (CUDA에서만)
-            with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
-                denoised = model_g(noisy).squeeze(1)
+            with torch.no_grad():
+                if use_overlap_add:
+                    # 간단한 overlap-add: 슬라이딩 윈도우로 분할하여 추론 후 재조합
+                    seg_len = config.get('segment_len', config['sample_rate'] * 2)
+                    hop = seg_len // 2
+                    xs = noisy.squeeze(1)
+                    L = xs.shape[-1]
+                    # pad to cover last frame
+                    pad = (seg_len - (L % hop)) % hop
+                    xs = torch.nn.functional.pad(xs, (0, pad))
+                    frames = xs.unfold(-1, seg_len, hop)  # (B=1, n_frames, seg_len)
+                    out_frames = []
+                    for f in frames.squeeze(0):
+                        f = f.unsqueeze(0).unsqueeze(1)  # (1,1,seg_len)
+                        with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+                            out_f = model_g(f).squeeze(1).squeeze(0)
+                        out_frames.append(out_f)
+                    # overlap-add
+                    recon = torch.zeros(xs.shape[-1], device=xs.device)
+                    win = torch.hann_window(seg_len, device=xs.device)
+                    norm = torch.zeros_like(recon)
+                    for i_f, of in enumerate(out_frames):
+                        start = i_f * hop
+                        recon[start:start+seg_len] += of * win
+                        norm[start:start+seg_len] += win
+                    recon = recon / (norm + 1e-8)
+                    # ensure batch dimension matches other branch: (1, T)
+                    denoised = recon[:L].unsqueeze(0)
+                else:
+                    with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+                        denoised = model_g(noisy).squeeze(1)
+
+                # Test-time augmentation: time-reversal average
+                if use_tta:
+                    with torch.amp.autocast(device_type=device.type, dtype=torch.float16, enabled=use_amp):
+                        noisy_rev = noisy.flip(-1)
+                        denoised_rev = model_g(noisy_rev).squeeze(1).flip(-1)
+                    # average (align lengths if necessary)
+                    min_len = min(denoised.shape[-1], denoised_rev.shape[-1])
+                    denoised = 0.5 * (denoised[..., :min_len] + denoised_rev[..., :min_len])
 
             # [오류 해결 로직] 메트릭 계산 전 길이 맞추기
             min_len = min(denoised.shape[-1], clean.shape[-1])
@@ -161,8 +203,8 @@ if __name__ == '__main__':
     # train.py의 CONFIG와 동일한 설정을 사용합니다.
     # 필요한 부분만 가져오거나 train.py에서 CONFIG를 import 할 수도 있습니다.
     TEST_CONFIG = {
-        "output_root": "convtasnet_additionalAugmented_finetune",
-        "checkpoint_path": "convtasnet_additionalAugmented_finetune/checkpoints/best_model.pth",  # 명시적 경로 지정
+        "output_root": "convtasnet_lightweighted_v2",
+        "checkpoint_path": "convtasnet_lightweighted_v2/checkpoints/best_model.pth",  # 명시적 경로 지정
         "dataset_dir": "dataset", 
         "test_csv": "diagnostics_test/normalized.csv",  # 직접 지정 시 사용. 예: "diagnostics_test/normalized.csv"
         "sample_rate": 16000,

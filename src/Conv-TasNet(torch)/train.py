@@ -20,7 +20,7 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_lightweighted",
+    "output_root": "convtasnet_lightweighted_v2",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
@@ -59,6 +59,9 @@ CONFIG = {
     "sample_rate": 16000,
     "segment_duration": 2, # 초 단위, 학습 시 사용할 오디오 조각 길이
 
+    # segment_len: 샘플 단위 길이 (테스트의 overlap-add에서 사용 가능)
+    "segment_len": 16000 * 2,
+
     # --- 모델 구조 ---
     "model_params": {
         "enc_dim": 128,
@@ -78,8 +81,10 @@ CONFIG = {
     "lambda_adv": 0.005,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
-    "lambda_stft": 1.0,  # MR-STFT loss 가중치
-    "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치
+    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (소폭 증가)
+    "lambda_perc": 1.2,  # Perceptual (Log-Mel) loss 가중치 (증가 권장)
+    # feature-matching loss (Discriminator 중간 feature L1) 가중치
+    "lambda_fm": 0.1,
 
     "lr_scheduler": {
         "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정

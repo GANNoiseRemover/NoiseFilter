@@ -30,10 +30,35 @@ class DepthwiseSeparableConv(nn.Module):
         self.pointwise = nn.Conv1d(in_channels, out_channels, 1)
         self.norm = GlobalLayerNorm(out_channels)
         self.prelu = nn.PReLU()
+        # Squeeze-and-Excitation block: 채널별 어텐션을 학습합니다.
+        # reduction=8은 파라미터가 적고 실험적으로도 효과적입니다.
+        class SEBlock(nn.Module):
+            def __init__(self, channels, reduction=8):
+                super().__init__()
+                hidden = max(1, channels // reduction)
+                # 1x1 conv를 FC 대용으로 사용 (시간 차원 유지)
+                self.fc1 = nn.Conv1d(channels, hidden, kernel_size=1)
+                self.relu = nn.ReLU(inplace=True)
+                self.fc2 = nn.Conv1d(hidden, channels, kernel_size=1)
+                self.sigmoid = nn.Sigmoid()
+
+            def forward(self, x):
+                # x: (B, C, T)
+                s = x.mean(dim=2, keepdim=True)  # (B, C, 1)
+                s = self.fc1(s)
+                s = self.relu(s)
+                s = self.fc2(s)
+                s = self.sigmoid(s)
+                return x * s
+
+        # instantiate SE module for this conv's output channels
+        self.se = SEBlock(out_channels, reduction=8)
 
     def forward(self, x):
         x = self.depthwise(x)
         x = self.pointwise(x)
+        # apply channel-wise attention (SE)
+        x = self.se(x)
         x = self.norm(x)
         x = self.prelu(x)
         return x
