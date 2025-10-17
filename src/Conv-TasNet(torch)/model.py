@@ -100,7 +100,7 @@ class TCNBlock(nn.Module):
         return identity + res, skip
 
 class ConvTasNet(nn.Module):
-    def __init__(self, enc_dim=512, win_len=16, num_spk=1, num_layers=3, num_blocks=8, conv_channels=512, kernel_size=3):
+    def __init__(self, enc_dim=512, win_len=16, num_spk=1, num_layers=3, num_blocks=8, conv_channels=512, kernel_size=3, max_dilation=128, use_refiner: bool = True, refiner_channels: int = 64):
         super(ConvTasNet, self).__init__()
         self.enc_dim = enc_dim
         self.win_len = win_len
@@ -111,13 +111,51 @@ class ConvTasNet(nn.Module):
         self.ln = GlobalLayerNorm(enc_dim)
         self.bottleneck = nn.Conv1d(enc_dim, enc_dim, 1)
 
+        # Use a global cumulative dilation schedule across layers/blocks
+        # This increases receptive field without changing parameter count.
         self.tcn_blocks = nn.ModuleList()
+        global_idx = 0
         for _ in range(num_layers):
             for i in range(num_blocks):
-                self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=2**i))
+                dilation = min(2 ** global_idx, max_dilation)
+                self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=dilation))
+                global_idx += 1
+
+        # Learnable per-block skip gates (scalar per block). Using a small number
+        # of parameters to gate skip contributions allows the network to downweight
+        # harmful skip signals while keeping overall parameter cost negligible.
+        self.skip_gates = nn.Parameter(torch.ones(len(self.tcn_blocks)))
 
         self.mask_conv = nn.Conv1d(enc_dim, num_spk * enc_dim, 1)
         self.decoder = nn.ConvTranspose1d(enc_dim, 1, win_len, bias=False, stride=win_len // 2)
+
+        # Lightweight time-domain residual post-refiner (very small parameter increase)
+        # Simple structure: Conv1d(1 -> refiner_channels, k=3) -> PReLU -> Conv1d(refiner_channels -> 1, k=1)
+        # Applied as decoded + alpha * refiner(decoded) where alpha is a small learnable scalar.
+        self.use_refiner = use_refiner
+        if self.use_refiner:
+            # deeper but still lightweight refiner: two 1D conv layers to model fine residual corrections
+            class RefinerBlock(nn.Module):
+                def __init__(self, in_ch, mid_ch):
+                    super().__init__()
+                    self.conv1 = nn.Conv1d(in_ch, mid_ch, kernel_size=3, padding=1)
+                    self.prelu1 = nn.PReLU()
+                    self.conv2 = nn.Conv1d(mid_ch, mid_ch, kernel_size=3, padding=1)
+                    self.prelu2 = nn.PReLU()
+                    self.conv3 = nn.Conv1d(mid_ch, 1, kernel_size=1)
+
+                def forward(self, x):
+                    # x: (B, 1, T)
+                    h = self.conv1(x)
+                    h = self.prelu1(h)
+                    h = self.conv2(h)
+                    h = self.prelu2(h)
+                    out = self.conv3(h)
+                    return out
+
+            self.refiner = RefinerBlock(1, refiner_channels)
+            # small initialized scale to avoid destabilizing pre-trained weights
+            self.refiner_scale = nn.Parameter(torch.tensor(0.1, dtype=torch.float32))
 
     def forward(self, x):
         if x.dim() == 2: x = x.unsqueeze(1)
@@ -129,8 +167,11 @@ class ConvTasNet(nn.Module):
 
         tcn_output = bottleneck_output
         skip_sum = None
-        for block in self.tcn_blocks:
+        for i, block in enumerate(self.tcn_blocks):
             tcn_output, skip = block(tcn_output)
+            # ensure positive gating; softplus keeps it >0 and is smooth
+            gate = F.softplus(self.skip_gates[i])
+            skip = skip * gate
             if skip_sum is None:
                 skip_sum = skip
             else:
@@ -155,6 +196,12 @@ class ConvTasNet(nn.Module):
         elif out_len > T:
             decoded_sources = decoded_sources[..., :T]
         
+        # Apply post-refiner if enabled
+        if self.use_refiner:
+            # refiner expects (B, 1, T)
+            ref_out = self.refiner(decoded_sources)
+            decoded_sources = decoded_sources + self.refiner_scale * ref_out
+
         return decoded_sources
 
 

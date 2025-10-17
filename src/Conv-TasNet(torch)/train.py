@@ -20,12 +20,12 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_lightweighted_v2",
+    "output_root": "convtasnet_lightweighted_v3_mmm",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
     "val_csv": "diagnostics_val/normalized.csv",           # 직접 지정 시 사용. 예: "diagnostics_val/normalized.csv"
-    "resume_checkpoint": "",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
+    "resume_checkpoint": "convtasnet_lightweighted_v3_mmm/checkpoints/checkpoint.pth",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
     "fine_tuning_checkpoint": "", # 예: "path/to/pretrained_model.pth"
     # --- 파인튜닝 전용 옵션 ---
     "is_finetune": False,             # 파인튜닝 모드 활성화
@@ -36,7 +36,7 @@ CONFIG = {
     # --- 학습 하이퍼파라미터 ---
     "seed": 42,
     "epochs": 100,
-    "batch_size": 8,
+    "batch_size": 16,
     "learning_rate_g": 5e-5,
     "learning_rate_d": 2e-4,
     # 파인튜닝 권장 학습률 (is_finetune=True일 때 아래 값을 사용)
@@ -53,7 +53,7 @@ CONFIG = {
     "pin_memory": True,
     # 작은 데이터셋 파인튜닝 시, 에포크당 업데이트 수를 늘리고 싶다면 설정
     # 0이면 비활성화, N>0이면 에포크마다 N 스텝이 되도록 샘플러가 중복 추출합니다.
-    "steps_per_epoch": 400,
+    "steps_per_epoch": 200,
 
     # --- 오디오 속성 ---
     "sample_rate": 16000,
@@ -67,10 +67,15 @@ CONFIG = {
         "enc_dim": 128,
         "win_len": 16,
         "num_spk": 1,
-        "num_layers": 1,
-        "num_blocks": 8,
-        "conv_channels": 128,
-        "kernel_size": 3,
+    # 상위 후보: 1M 미만에서 표현력을 최대화한 구성 (enc_dim 증가, conv 채널 증가, 블록 수 조정)
+    "enc_dim": 160,
+    "num_layers": 1,
+    "num_blocks": 14,
+    "conv_channels": 104,
+    "kernel_size": 5,
+        # refiner 파라미터: 작은 추가 파라미터로 PESQ/STOI 개선을 도모
+        "use_refiner": True,
+        "refiner_channels": 64,
     },
 
     # --- 손실 함수 가중치 ---
@@ -82,7 +87,8 @@ CONFIG = {
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
     "lambda_stft": 1.2,  # MR-STFT loss 가중치 (소폭 증가)
-    "lambda_perc": 1.2,  # Perceptual (Log-Mel) loss 가중치 (증가 권장)
+    "lambda_stft": 1.5,  # MR-STFT loss 가중치 (소폭 증가)
+    "lambda_perc": 1.5,  # Perceptual (Log-Mel) loss 가중치 (증가 권장)
     # feature-matching loss (Discriminator 중간 feature L1) 가중치
     "lambda_fm": 0.1,
 
@@ -91,6 +97,11 @@ CONFIG = {
         "T_max": 100,          # 반복 주기(일반적으로 전체 에포크 수와 동일하게 설정)
         "eta_min": 1e-6        # 최소 학습률
     },
+
+    # --- 체크포인트 저장/모니터링 기준 ---
+    # monitor_metric: 'val_loss' (lower better) 또는 'pesq'/'stoi'/'si_sdr' (higher better)
+    "monitor_metric": "val_loss",
+    "monitor_mode": "min",  # 'min' 또는 'max' (기본은 val_loss에 대해 'min')
 
     # --- 로깅 및 저장 ---
     "save_interval": 5, # N 에포크마다 체크포인트 저장
@@ -154,6 +165,21 @@ def main(config):
     # --- 3. 모델, 옵티마이저, 손실 함수 정의 ---
     model_g = ConvTasNet(**config['model_params']).to(device)
     model_d = Discriminator().to(device)
+
+    # 소규모 모델에서 후처리 영향력을 약간 증가시켜 PESQ 개선을 도모
+    # (안정성을 위해 작은 값으로 시작)
+    try:
+        with torch.no_grad():
+            if hasattr(model_g, 'refiner_scale'):
+                model_g.refiner_scale.data = torch.tensor(0.15, dtype=model_g.refiner_scale.dtype, device=model_g.refiner_scale.device)
+                print(f"refiner_scale set to {float(model_g.refiner_scale.data):.3f}")
+            # Optional: initialize per-block skip gates (set all to a small value to let training enable them)
+            if config.get('skip_gates_init', False) and hasattr(model_g, 'skip_gates'):
+                init_val = float(config.get('skip_gates_init_value', 0.0))
+                model_g.skip_gates.data.fill_(init_val)
+                print(f"skip_gates initialized to {init_val}")
+    except Exception as e:
+        print(f"refiner_scale 조정 중 오류: {e}")
 
     # --- [성능 가속화] torch.compile 적용 ---
     if config.get("use_torch_compile", False) and hasattr(torch, 'compile'):
