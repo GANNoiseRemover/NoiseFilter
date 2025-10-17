@@ -115,6 +115,9 @@ class ConvTasNet(nn.Module):
         use_refiner: bool = False,
         refiner_channels: int = 32,
         use_skip_gates: bool = False,
+        # New options
+        use_dual_mask_head: bool = False,
+        use_postfilter: bool = False,
     ):
         super(ConvTasNet, self).__init__()
         self.enc_dim = enc_dim
@@ -124,18 +127,29 @@ class ConvTasNet(nn.Module):
         self.mask_activation = mask_activation.lower()
         self.use_refiner = bool(use_refiner)
         self.use_skip_gates = bool(use_skip_gates)
+        self.use_dual_mask_head = bool(use_dual_mask_head)
+        self.use_postfilter = bool(use_postfilter)
 
         self.encoder = nn.Conv1d(1, enc_dim, win_len, bias=False, stride=win_len // 2)
         # gLN으로 교체: 입력 (B, C, T) 그대로 처리
         self.ln = GlobalLayerNorm(enc_dim)
         self.bottleneck = nn.Conv1d(enc_dim, enc_dim, 1)
 
-        # Use a global cumulative dilation schedule across layers/blocks
-        # This increases receptive field without changing parameter count.
+        # Use a global expanding dilation schedule across all blocks (not resetting per layer)
+        # This increases receptive field without changing parameter count and can help PESQ.
         self.tcn_blocks = nn.ModuleList()
-        for _ in range(num_layers):
-            for i in range(num_blocks):
-                self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=2**i, skip_channels=self.skip_channels))
+        total_blocks = num_layers * num_blocks
+        for idx in range(total_blocks):
+            dil = 2 ** idx
+            # cap dilation to avoid excessive padding/instability; cycle after reaching a max exponent
+            if dil > 512:
+                # cycle within [1..512]
+                # find exponent modulo range so that pattern repeats
+                from math import log2
+                max_exp = int(log2(512))
+                exp = (idx % (max_exp + 1))
+                dil = 2 ** exp
+            self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=dil, skip_channels=self.skip_channels))
 
         # Optional learnable positive gates for each skip connection
         if self.use_skip_gates:
@@ -146,6 +160,13 @@ class ConvTasNet(nn.Module):
 
         # mask는 skip 경로의 피처를 사용해 예측합니다 (더 가벼운 skip로 파라미터 절약)
         self.mask_conv = nn.Conv1d(self.skip_channels, num_spk * enc_dim, 1)
+        # Optional second mask head for activation ensemble (sigmoid + softplus)
+        if self.use_dual_mask_head:
+            self.mask_conv_2 = nn.Conv1d(self.skip_channels, num_spk * enc_dim, 1)
+            # learnable blend between [0,1] via sigmoid
+            self.mask_blend = nn.Parameter(torch.tensor(0.5, dtype=torch.float32))
+        else:
+            self.register_parameter('mask_blend', None)
         self.decoder = nn.ConvTranspose1d(enc_dim, 1, win_len, bias=False, stride=win_len // 2)
 
         # Lightweight time-domain residual post-refiner (very small parameter increase)
@@ -175,6 +196,13 @@ class ConvTasNet(nn.Module):
             # small initialized scale to avoid destabilizing pre-trained weights
             self.refiner_scale = nn.Parameter(torch.tensor(0.1, dtype=torch.float32))
 
+        # Optional lightweight differentiable Wiener-like post-filter in STFT domain
+        if self.use_postfilter:
+            # single learnable strength parameter; softplus to keep positive
+            self.postfilter_strength = nn.Parameter(torch.tensor(0.3, dtype=torch.float32))
+        else:
+            self.register_parameter('postfilter_strength', None)
+
     def forward(self, x):
         if x.dim() == 2: x = x.unsqueeze(1)
         
@@ -197,14 +225,28 @@ class ConvTasNet(nn.Module):
                 skip_sum = skip_sum + skip
 
         feat_for_mask = skip_sum if skip_sum is not None else tcn_output
-        masks = self.mask_conv(feat_for_mask)
-        # 마스크 활성화 선택지: sigmoid(0..1), relu([0,inf)), softplus
-        if self.mask_activation == 'relu':
-            masks = F.relu(masks)
-        elif self.mask_activation == 'softplus':
-            masks = F.softplus(masks)
+        masks_1 = self.mask_conv(feat_for_mask)
+        # 기본 활성화
+        def _activate(m):
+            if self.mask_activation == 'relu':
+                return F.relu(m)
+            elif self.mask_activation == 'softplus':
+                return F.softplus(m)
+            else:
+                return torch.sigmoid(m)
+        masks_1 = _activate(masks_1)
+        if self.use_dual_mask_head:
+            # second head with complementary activation
+            masks_2 = self.mask_conv_2(feat_for_mask)
+            # choose activation different from primary for diversity
+            if self.mask_activation == 'softplus':
+                masks_2 = torch.sigmoid(masks_2)
+            else:
+                masks_2 = F.softplus(masks_2)
+            w = torch.sigmoid(self.mask_blend)
+            masks = w * masks_1 + (1.0 - w) * masks_2
         else:
-            masks = torch.sigmoid(masks)
+            masks = masks_1
         masks = masks.view(x.shape[0], self.num_spk, self.enc_dim, -1)
         
         estimated_sources = masks * mixture_w.unsqueeze(1)
@@ -227,6 +269,50 @@ class ConvTasNet(nn.Module):
             # refiner expects (B, 1, T)
             ref_out = self.refiner(decoded_sources)
             decoded_sources = decoded_sources + self.refiner_scale * ref_out
+
+        # Optional Wiener-like post-filter in STFT domain using residual estimate
+        if self.use_postfilter:
+            # Compute residual (approx noise) and build Wiener gain in FP32 outside autocast
+            B, _, T = decoded_sources.shape
+            mix = x
+            if mix.shape[-1] != T:
+                if mix.shape[-1] < T:
+                    mix = F.pad(mix, (0, T - mix.shape[-1]))
+                else:
+                    mix = mix[..., :T]
+            resid = (mix - decoded_sources).squeeze(1)
+            sig = decoded_sources.squeeze(1)
+            # Disable autocast for complex STFT ops and force float32
+            try:
+                ctx = torch.amp.autocast('cuda', enabled=False) if sig.is_cuda else torch.cuda.amp.autocast(enabled=False)
+            except Exception:
+                # Fallback: no context manager
+                class _N:
+                    def __enter__(self):
+                        return None
+                    def __exit__(self, *args):
+                        return False
+                ctx = _N()
+            with ctx:
+                sig32 = sig.float()
+                resid32 = resid.float()
+                win = 1024
+                hop = 256
+                window = torch.hann_window(win, device=sig32.device, dtype=sig32.dtype)
+                S = torch.stft(sig32, n_fft=win, hop_length=hop, win_length=win, window=window, return_complex=True, center=True, pad_mode='reflect')
+                R = torch.stft(resid32, n_fft=win, hop_length=hop, win_length=win, window=window, return_complex=True, center=True, pad_mode='reflect')
+                Syy = (S.real**2 + S.imag**2)
+                Rnn = (R.real**2 + R.imag**2)
+                alpha = F.softplus(self.postfilter_strength) + 1e-5
+                G = Syy / (Syy + alpha * Rnn + 1e-8)
+                S_filt = G * S
+                y_filt = torch.istft(S_filt, n_fft=win, hop_length=hop, win_length=win, window=window, center=True)
+            if y_filt.shape[-1] < T:
+                y_filt = F.pad(y_filt, (0, T - y_filt.shape[-1]))
+            elif y_filt.shape[-1] > T:
+                y_filt = y_filt[..., :T]
+            y_filt = y_filt.unsqueeze(1)
+            decoded_sources = y_filt
 
         return decoded_sources
 

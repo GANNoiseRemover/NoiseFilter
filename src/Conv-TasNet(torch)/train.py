@@ -20,12 +20,12 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_v5_sigmoid16_conv144_skip96_mod1",
+    "output_root": "convtasnet_v6_dualmask_postfilter",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
     "val_csv": "diagnostics_val/normalized.csv",           # 직접 지정 시 사용. 예: "diagnostics_val/normalized.csv"
-    "resume_checkpoint": "",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
+    "resume_checkpoint": "convtasnet_v6_dualmask_postfilter/checkpoints/checkpoint.pth",  # 새 실험으로 시작
     "fine_tuning_checkpoint": "", # 예: "path/to/pretrained_model.pth"
     # --- 파인튜닝 전용 옵션 ---
     "is_finetune": False,             # 파인튜닝 모드 활성화
@@ -45,7 +45,7 @@ CONFIG = {
 
     # --- 성능 가속화 설정 ---
     "use_amp": True,  # Automatic Mixed Precision (AMP) 사용 여부. GPU 사용 시 속도 향상.
-    "use_torch_compile": True, # PyTorch 2.0+의 torch.compile() 사용 여부. 호환성에 따라 속도 향상 또는 저하 가능.
+    "use_torch_compile": False, # compile은 STFT 기반 post-filter와 상성이 좋지 않아 비활성화
     "detect_anomaly": False,  # autograd anomaly detection (디버깅 시 True 권장)
 
     # --- 데이터로더 설정 ---
@@ -72,21 +72,23 @@ CONFIG = {
     "conv_channels": 144,
         "kernel_size": 3,
     "skip_channels": 96,
-        "mask_activation": "sigmoid",
+        "mask_activation": "softplus",
         "use_refiner": True,
         "refiner_channels": 32,
-        # "use_skip_gates": True
+        "use_skip_gates": True,
+        "use_dual_mask_head": True,
+        "use_postfilter": True
     },
-    # "skip_gates_init": True,
-    # "skip_gates_init_value": 0.1,  # skip gate 초기값 설정 (예: 0.0)
+    "skip_gates_init": True,
+    "skip_gates_init_value": 0.1,  # skip gate 초기값 설정
 
     # --- 손실 함수 가중치 ---
-    "use_adv": False,     # GAN 손실 사용 여부
+    "use_adv": True,     # GAN 손실 사용 여부
     "use_stft": True,    # MR-STFT 손실 사용 여부
     "use_perc": True,    # Perceptual(Log-Mel) 손실 사용 여부
 
     "lambda_adv": 0.005,  # GAN 손실 가중치
-    "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
+    "adv_warmup_epochs": 60, # 60에포크까지 0.0, 이후 자동으로 켜짐 (사용자 스케줄 반영)
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
     "lambda_stft": 1.0,  # MR-STFT loss 가중치 (PESQ 개선 유도)
     "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치 (청감 품질 강화)
@@ -226,7 +228,47 @@ def main(config):
     mrstft_loss = MRSTFTLoss(sr=config['sample_rate'], freq_weighting='hf', hf_cutoff_hz=4000.0, hf_boost=1.25, hf_alpha=1.25).to(device)
     # Pre-emphasis L1 loss to reduce crackling and preserve HF transients
     preemph_loss = PreEmphasisLoss(coeff=0.97).to(device)
-    perc_loss_fn = LogMelPerceptualLoss(sr=config['sample_rate']).to(device)
+    # 멜 해상도를 소폭 올려 고주파 변화를 더 잘 감지
+    perc_loss_fn = LogMelPerceptualLoss(sr=config['sample_rate'], n_mels=128).to(device)
+
+    # --- EMA (지수이동평균)로 평가 시 가중치 스무딩 ---
+    class ModelEMA:
+        def __init__(self, model: torch.nn.Module, decay: float = 0.995):
+            self.decay = decay
+            # shadow params in FP32
+            self.shadow = {k: p.detach().float().clone() for k, p in model.named_parameters() if p.requires_grad}
+            self.backup = None
+
+        @torch.no_grad()
+        def update(self, model: torch.nn.Module):
+            for (name, p) in model.named_parameters():
+                if not p.requires_grad:
+                    continue
+                if name in self.shadow:
+                    self.shadow[name].mul_(self.decay).add_(p.detach().float(), alpha=1.0 - self.decay)
+                else:
+                    self.shadow[name] = p.detach().float().clone()
+
+        @torch.no_grad()
+        def apply_shadow(self, model: torch.nn.Module):
+            self.backup = {}
+            for name, p in model.named_parameters():
+                if not p.requires_grad:
+                    continue
+                self.backup[name] = p.data.clone()
+                if name in self.shadow:
+                    p.data.copy_(self.shadow[name].to(p.dtype).to(p.device))
+
+        @torch.no_grad()
+        def restore(self, model: torch.nn.Module):
+            if self.backup is None:
+                return
+            for name, p in model.named_parameters():
+                if name in self.backup:
+                    p.data.copy_(self.backup[name])
+            self.backup = None
+
+    ema = ModelEMA(model_g, decay=0.995)
 
     # --- [성능 가속화 & 경고 수정] AMP GradScaler 초기화 ---
     use_amp = config.get("use_amp", False) and device.type == 'cuda'
@@ -284,6 +326,20 @@ def main(config):
     # --- 7. 학습 및 검증 루프 ---
     patience_counter = 0
     for epoch in range(start_epoch, config['epochs']):
+        # Optional: adjust dual mask blend if enabled in model
+        try:
+            if hasattr(model_g, 'mask_blend') and model_g.mask_blend is not None:
+                # before 60: balanced; 60-75: move towards softplus; >=75: favor softplus more
+                if epoch < 60:
+                    target = 0.5
+                elif epoch < 75:
+                    target = 0.65
+                else:
+                    target = 0.8
+                with torch.no_grad():
+                    model_g.mask_blend.data = torch.tensor(target, dtype=model_g.mask_blend.dtype, device=model_g.mask_blend.device)
+        except Exception:
+            pass
         # Adversarial loss warmup: adv_warmup_epochs까지 0.0, 이후 자동 변경
         if epoch < config.get("adv_warmup_epochs", 5):
             w_adv = 0.0
@@ -350,7 +406,7 @@ def main(config):
             w_adv = (0.0 if (config.get('is_finetune', False) and epoch < config.get('disable_d_epochs', 0)) else (config['lambda_adv'] if config.get('use_adv', True) else 0.0))
 
             # Small pre-emphasis loss weight to suppress crackling and preserve HF
-            w_pre = 0.1
+            w_pre = 0.15
             loss_pre = preemph_loss(denoised_wav, clean)
             g_loss = (w_sdr * loss_sdr + w_stft * loss_stft + w_perc * loss_perc + w_adv * loss_adv + w_pre * loss_pre)
 
@@ -367,6 +423,8 @@ def main(config):
             torch.nn.utils.clip_grad_norm_(model_g.parameters(), max_norm=1.0)
             scaler_g.step(optimizer_g)
             scaler_g.update()
+            # EMA 업데이트
+            ema.update(model_g)
 
             # --- [성능 가속화 & 경고 수정] AMP Autocast 적용 ---
             # --- Discriminator 학습 ---
@@ -403,6 +461,8 @@ def main(config):
         model_g.eval()
         total_val_loss, total_pesq, total_stoi, total_si_sdr = 0, 0, 0, 0
         with torch.no_grad():
+            # 검증 전, EMA 가중치로 스왑
+            ema.apply_shadow(model_g)
             for i, (noisy, clean) in enumerate(tqdm(val_loader, desc=f"Epoch {epoch}/{config['epochs']} [검증]")):
                 noisy, clean = noisy.to(device), clean.to(device)
                 
@@ -416,6 +476,17 @@ def main(config):
 
                 # 검증 손실은 SI-SDR + MR-STFT로 구성 (Adv 제외)
                 val_sdr = reconstruction_loss(denoised.squeeze(1), clean)
+                # 에폭별 스케줄: 고주파 가중과 프리엠퍼시스 손실을 소폭 증가
+                if epoch >= 30:
+                    mrstft_loss.hf_boost = 1.5
+                    w_pre_eval = 0.2
+                elif epoch >= 10:
+                    mrstft_loss.hf_boost = 1.35
+                    w_pre_eval = 0.15
+                else:
+                    mrstft_loss.hf_boost = 1.25
+                    w_pre_eval = 0.1
+
                 val_stft = mrstft_loss(denoised.squeeze(1), clean)
                 val_perc = perc_loss_fn(denoised.squeeze(1), clean)
                 total_val_loss += (config['lambda_sdr'] * val_sdr + config['lambda_stft'] * val_stft + config['lambda_perc'] * val_perc).item()
@@ -424,6 +495,9 @@ def main(config):
                 if i < 5 and epoch % config['save_interval'] == 0:
                     save_sample_audios(eval_dir, f"epoch_{epoch}_sample_{i}", clean.squeeze(0), noisy.squeeze(0), denoised.squeeze(0), config['sample_rate'])
                     save_spectrogram_images(eval_dir, f"epoch_{epoch}_sample_{i}", clean.squeeze(0), noisy.squeeze(0), denoised.squeeze(0), config['sample_rate'])
+
+            # EMA 가중치 복원
+            ema.restore(model_g)
 
         avg_val_loss = total_val_loss / len(val_loader); avg_pesq = total_pesq / len(val_loader)
         avg_stoi = total_stoi / len(val_loader); avg_si_sdr = total_si_sdr / len(val_loader)
