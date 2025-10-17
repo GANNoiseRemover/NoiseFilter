@@ -65,17 +65,14 @@ CONFIG = {
     # --- 모델 구조 ---
     "model_params": {
         "enc_dim": 128,
-        "win_len": 16,
+        "win_len": 32,
         "num_spk": 1,
-    # 상위 후보: 1M 미만에서 표현력을 최대화한 구성 (enc_dim 증가, conv 채널 증가, 블록 수 조정)
-    "enc_dim": 160,
-    "num_layers": 1,
-    "num_blocks": 14,
-    "conv_channels": 104,
-    "kernel_size": 5,
-        # refiner 파라미터: 작은 추가 파라미터로 PESQ/STOI 개선을 도모
-        "use_refiner": True,
-        "refiner_channels": 64,
+        "num_layers": 2,
+        "num_blocks": 6,
+        "conv_channels": 128,
+        "kernel_size": 3,
+        "skip_channels": 64,
+        "mask_activation": "relu",
     },
 
     # --- 손실 함수 가중치 ---
@@ -86,11 +83,8 @@ CONFIG = {
     "lambda_adv": 0.005,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
-    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (소폭 증가)
-    "lambda_stft": 1.5,  # MR-STFT loss 가중치 (소폭 증가)
-    "lambda_perc": 1.5,  # Perceptual (Log-Mel) loss 가중치 (증가 권장)
-    # feature-matching loss (Discriminator 중간 feature L1) 가중치
-    "lambda_fm": 0.1,
+    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (PESQ 개선 유도)
+    "lambda_perc": 1.0,  # Perceptual (Log-Mel) loss 가중치 (청감 품질 강화)
 
     "lr_scheduler": {
         "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정
