@@ -39,7 +39,7 @@ class DepthwiseSeparableConv(nn.Module):
         return x
 
 class TCNBlock(nn.Module):
-    def __init__(self, in_channels, conv_channels, kernel_size, dilation):
+    def __init__(self, in_channels, conv_channels, kernel_size, dilation, skip_channels=None, dropout=0.1):
         super(TCNBlock, self).__init__()
         # 1x1 bottleneck -> depthwise separable -> split to residual/skip (Conv-TasNet style)
         self.conv1 = nn.Conv1d(in_channels, conv_channels, 1)
@@ -55,10 +55,11 @@ class TCNBlock(nn.Module):
         )
         self.prelu2 = nn.PReLU()
         self.norm2 = GlobalLayerNorm(conv_channels)
-        # Separate heads for residual and skip
+        # Separate heads for residual and skip (skip dim can be smaller)
         self.res_out = nn.Conv1d(conv_channels, in_channels, 1)
-        self.skip_out = nn.Conv1d(conv_channels, in_channels, 1)
-        self.dropout = nn.Dropout(0.1)
+        self.skip_channels = in_channels if skip_channels is None else int(skip_channels)
+        self.skip_out = nn.Conv1d(conv_channels, self.skip_channels, 1)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
         identity = x
@@ -75,11 +76,13 @@ class TCNBlock(nn.Module):
         return identity + res, skip
 
 class ConvTasNet(nn.Module):
-    def __init__(self, enc_dim=512, win_len=16, num_spk=1, num_layers=3, num_blocks=8, conv_channels=512, kernel_size=3):
+    def __init__(self, enc_dim=512, win_len=16, num_spk=1, num_layers=3, num_blocks=8, conv_channels=512, kernel_size=3, skip_channels=None, mask_activation: str = 'sigmoid'):
         super(ConvTasNet, self).__init__()
         self.enc_dim = enc_dim
         self.win_len = win_len
         self.num_spk = num_spk
+        self.skip_channels = enc_dim if skip_channels is None else int(skip_channels)
+        self.mask_activation = mask_activation.lower()
 
         self.encoder = nn.Conv1d(1, enc_dim, win_len, bias=False, stride=win_len // 2)
         # gLN으로 교체: 입력 (B, C, T) 그대로 처리
@@ -89,9 +92,10 @@ class ConvTasNet(nn.Module):
         self.tcn_blocks = nn.ModuleList()
         for _ in range(num_layers):
             for i in range(num_blocks):
-                self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=2**i))
+                self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=2**i, skip_channels=self.skip_channels))
 
-        self.mask_conv = nn.Conv1d(enc_dim, num_spk * enc_dim, 1)
+        # mask는 skip 경로의 피처를 사용해 예측합니다 (더 가벼운 skip로 파라미터 절약)
+        self.mask_conv = nn.Conv1d(self.skip_channels, num_spk * enc_dim, 1)
         self.decoder = nn.ConvTranspose1d(enc_dim, 1, win_len, bias=False, stride=win_len // 2)
 
     def forward(self, x):
@@ -113,7 +117,14 @@ class ConvTasNet(nn.Module):
 
         feat_for_mask = skip_sum if skip_sum is not None else tcn_output
         masks = self.mask_conv(feat_for_mask)
-        masks = torch.sigmoid(masks).view(x.shape[0], self.num_spk, self.enc_dim, -1)
+        # 마스크 활성화 선택지: sigmoid(0..1), relu([0,inf)), softplus
+        if self.mask_activation == 'relu':
+            masks = F.relu(masks)
+        elif self.mask_activation == 'softplus':
+            masks = F.softplus(masks)
+        else:
+            masks = torch.sigmoid(masks)
+        masks = masks.view(x.shape[0], self.num_spk, self.enc_dim, -1)
         
         estimated_sources = masks * mixture_w.unsqueeze(1)
         

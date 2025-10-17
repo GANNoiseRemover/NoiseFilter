@@ -62,12 +62,14 @@ CONFIG = {
     # --- 모델 구조 ---
     "model_params": {
         "enc_dim": 128,
-        "win_len": 16,
+        "win_len": 32,
         "num_spk": 1,
-        "num_layers": 1,
-        "num_blocks": 8,
+        "num_layers": 2,
+        "num_blocks": 6,
         "conv_channels": 128,
         "kernel_size": 3,
+        "skip_channels": 64,
+        "mask_activation": "relu",
     },
 
     # --- 손실 함수 가중치 ---
@@ -78,8 +80,8 @@ CONFIG = {
     "lambda_adv": 0.005,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
-    "lambda_stft": 1.0,  # MR-STFT loss 가중치
-    "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치
+    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (PESQ 개선 유도)
+    "lambda_perc": 1.0,  # Perceptual (Log-Mel) loss 가중치 (청감 품질 강화)
 
     "lr_scheduler": {
         "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정
