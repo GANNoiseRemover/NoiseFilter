@@ -20,12 +20,12 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_lightweighted",
+    "output_root": "convtasnet_lightweighted_v3_mmm",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
     "val_csv": "diagnostics_val/normalized.csv",           # 직접 지정 시 사용. 예: "diagnostics_val/normalized.csv"
-    "resume_checkpoint": "",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
+    "resume_checkpoint": "convtasnet_lightweighted_v3_mmm/checkpoints/checkpoint.pth",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
     "fine_tuning_checkpoint": "", # 예: "path/to/pretrained_model.pth"
     # --- 파인튜닝 전용 옵션 ---
     "is_finetune": False,             # 파인튜닝 모드 활성화
@@ -36,7 +36,7 @@ CONFIG = {
     # --- 학습 하이퍼파라미터 ---
     "seed": 42,
     "epochs": 100,
-    "batch_size": 8,
+    "batch_size": 16,
     "learning_rate_g": 5e-5,
     "learning_rate_d": 2e-4,
     # 파인튜닝 권장 학습률 (is_finetune=True일 때 아래 값을 사용)
@@ -53,21 +53,29 @@ CONFIG = {
     "pin_memory": True,
     # 작은 데이터셋 파인튜닝 시, 에포크당 업데이트 수를 늘리고 싶다면 설정
     # 0이면 비활성화, N>0이면 에포크마다 N 스텝이 되도록 샘플러가 중복 추출합니다.
-    "steps_per_epoch": 400,
+    "steps_per_epoch": 200,
 
     # --- 오디오 속성 ---
     "sample_rate": 16000,
     "segment_duration": 2, # 초 단위, 학습 시 사용할 오디오 조각 길이
+
+    # segment_len: 샘플 단위 길이 (테스트의 overlap-add에서 사용 가능)
+    "segment_len": 16000 * 2,
 
     # --- 모델 구조 ---
     "model_params": {
         "enc_dim": 128,
         "win_len": 16,
         "num_spk": 1,
-        "num_layers": 1,
-        "num_blocks": 8,
-        "conv_channels": 128,
-        "kernel_size": 3,
+    # 상위 후보: 1M 미만에서 표현력을 최대화한 구성 (enc_dim 증가, conv 채널 증가, 블록 수 조정)
+    "enc_dim": 160,
+    "num_layers": 1,
+    "num_blocks": 14,
+    "conv_channels": 104,
+    "kernel_size": 5,
+        # refiner 파라미터: 작은 추가 파라미터로 PESQ/STOI 개선을 도모
+        "use_refiner": True,
+        "refiner_channels": 64,
     },
 
     # --- 손실 함수 가중치 ---
@@ -78,16 +86,22 @@ CONFIG = {
     "lambda_adv": 0.005,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
-    "lambda_stft": 1.0,  # MR-STFT loss 가중치
-    "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치
+    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (소폭 증가)
+    "lambda_stft": 1.5,  # MR-STFT loss 가중치 (소폭 증가)
+    "lambda_perc": 1.5,  # Perceptual (Log-Mel) loss 가중치 (증가 권장)
+    # feature-matching loss (Discriminator 중간 feature L1) 가중치
+    "lambda_fm": 0.1,
 
-    # --- 스케줄러 ---
     "lr_scheduler": {
-        "type": "plateau",  # 'plateau'만 지원
-        "factor": 0.5,
-        "patience": 3,
-        "min_lr": 1e-6
+        "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정
+        "T_max": 100,          # 반복 주기(일반적으로 전체 에포크 수와 동일하게 설정)
+        "eta_min": 1e-6        # 최소 학습률
     },
+
+    # --- 체크포인트 저장/모니터링 기준 ---
+    # monitor_metric: 'val_loss' (lower better) 또는 'pesq'/'stoi'/'si_sdr' (higher better)
+    "monitor_metric": "val_loss",
+    "monitor_mode": "min",  # 'min' 또는 'max' (기본은 val_loss에 대해 'min')
 
     # --- 로깅 및 저장 ---
     "save_interval": 5, # N 에포크마다 체크포인트 저장
@@ -152,6 +166,21 @@ def main(config):
     model_g = ConvTasNet(**config['model_params']).to(device)
     model_d = Discriminator().to(device)
 
+    # 소규모 모델에서 후처리 영향력을 약간 증가시켜 PESQ 개선을 도모
+    # (안정성을 위해 작은 값으로 시작)
+    try:
+        with torch.no_grad():
+            if hasattr(model_g, 'refiner_scale'):
+                model_g.refiner_scale.data = torch.tensor(0.15, dtype=model_g.refiner_scale.dtype, device=model_g.refiner_scale.device)
+                print(f"refiner_scale set to {float(model_g.refiner_scale.data):.3f}")
+            # Optional: initialize per-block skip gates (set all to a small value to let training enable them)
+            if config.get('skip_gates_init', False) and hasattr(model_g, 'skip_gates'):
+                init_val = float(config.get('skip_gates_init_value', 0.0))
+                model_g.skip_gates.data.fill_(init_val)
+                print(f"skip_gates initialized to {init_val}")
+    except Exception as e:
+        print(f"refiner_scale 조정 중 오류: {e}")
+
     # --- [성능 가속화] torch.compile 적용 ---
     if config.get("use_torch_compile", False) and hasattr(torch, 'compile'):
         print("torch.compile()을 사용하여 Generator를 최적화합니다... (첫 에포크는 컴파일 시간으로 인해 약간 느릴 수 있습니다)")
@@ -176,7 +205,15 @@ def main(config):
     optimizer_g = torch.optim.Adam(model_g.parameters(), lr=lr_g, weight_decay=1e-4)
     optimizer_d = torch.optim.Adam(model_d.parameters(), lr=lr_d)
     scheduler_g = None
-    if config.get("lr_scheduler", {}).get("type") == "plateau":
+    lr_scheduler_type = config.get("lr_scheduler", {}).get("type")
+    if lr_scheduler_type == "cosine":
+        s = config["lr_scheduler"]
+        scheduler_g = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_g,
+            T_max=s.get("T_max", config["epochs"]),
+            eta_min=s.get("eta_min", 1e-6)
+        )
+    elif lr_scheduler_type == "plateau":
         s = config["lr_scheduler"]
         scheduler_g = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer_g, mode='min', factor=s.get("factor", 0.5), patience=s.get("patience", 3),
@@ -384,9 +421,12 @@ def main(config):
         avg_val_loss = total_val_loss / len(val_loader); avg_pesq = total_pesq / len(val_loader)
         avg_stoi = total_stoi / len(val_loader); avg_si_sdr = total_si_sdr / len(val_loader)
         
-        # 스케줄러 스텝 (Plateau)
+        # 스케줄러 스텝
         if scheduler_g is not None:
-            scheduler_g.step(avg_val_loss)
+            if lr_scheduler_type == "cosine":
+                scheduler_g.step()
+            else:
+                scheduler_g.step(avg_val_loss)
 
         # 현재 LR 출력
         current_lr = optimizer_g.param_groups[0]['lr']
