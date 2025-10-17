@@ -310,13 +310,29 @@ def save_spectrogram_images(output_dir, filename_base, clean, noisy, denoised, s
 
 # --- 멀티해상도 STFT 손실 ---
 class MRSTFTLoss(nn.Module):
-    def __init__(self, fft_sizes=(512, 1024, 2048), hop_sizes=(128, 256, 512), win_lengths=(512, 1024, 2048), eps=1e-7):
+    def __init__(
+        self,
+        fft_sizes=(512, 1024, 2048),
+        hop_sizes=(128, 256, 512),
+        win_lengths=(512, 1024, 2048),
+        eps: float = 1e-7,
+        sr: int = 16000,
+        freq_weighting: str | None = None,  # None | 'hf'
+        hf_alpha: float = 1.5,             # ramp exponent for high-freq emphasis
+        hf_cutoff_hz: float = 3500.0,      # start boosting above this frequency
+        hf_boost: float = 1.5,             # overall scale of high-freq weight
+    ):
         super().__init__()
         assert len(fft_sizes) == len(hop_sizes) == len(win_lengths)
         self.fft_sizes = fft_sizes
         self.hop_sizes = hop_sizes
         self.win_lengths = win_lengths
         self.eps = eps
+        self.sr = sr
+        self.freq_weighting = freq_weighting
+        self.hf_alpha = hf_alpha
+        self.hf_cutoff_hz = hf_cutoff_hz
+        self.hf_boost = hf_boost
 
     def stft_mag(self, x, n_fft, hop_length, win_length):
         # x: (B, T)
@@ -336,10 +352,59 @@ class MRSTFTLoss(nn.Module):
             # Spectral convergence
             sc = torch.linalg.norm(T - P) / (torch.linalg.norm(T) + self.eps)
             # Log-magnitude loss
-            mag = torch.mean(torch.abs(torch.log(T + self.eps) - torch.log(P + self.eps)))
+            log_diff = torch.abs(torch.log(T + self.eps) - torch.log(P + self.eps))
+            if self.freq_weighting == 'hf':
+                # emphasize high-frequency bins using a simple ramp above cutoff
+                F = T.size(1)
+                # cutoff bin based on Nyquist
+                nyq = self.sr / 2.0
+                cutoff_bin = int(min(F - 1, max(0, round(self.hf_cutoff_hz / nyq * (F - 1)))))
+                # ramp from 0..1 across bins
+                ramp = torch.linspace(0.0, 1.0, F, device=T.device, dtype=T.dtype).pow(self.hf_alpha)
+                # boost only above cutoff
+                mask = torch.zeros_like(ramp)
+                if cutoff_bin < F:
+                    mask[cutoff_bin:] = 1.0
+                weight = 1.0 + self.hf_boost * (ramp * mask)
+                # normalize average weight ~1 to not change global scale much
+                weight = weight * (F / weight.sum())
+                # apply per-frequency weight
+                log_diff = log_diff * weight.view(1, F, 1)
+            mag = torch.mean(log_diff)
             total_sc = total_sc + sc
             total_mag = total_mag + mag
         return total_sc + total_mag
+
+
+class PreEmphasisLoss(nn.Module):
+    """
+    간단한 프리엠퍼시스(고주파 강조) 필터 도메인에서 L1 손실을 계산해
+    치찰/파열음과 같은 고주파 트랜지언트 보존을 돕습니다.
+    """
+    def __init__(self, coeff: float = 0.97):
+        super().__init__()
+        self.coeff = coeff
+
+    def preemph(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, T)
+        x = x.float()
+        # y[n] = x[n] - a * x[n-1]
+        y = x.clone()
+        y[:, 1:] = x[:, 1:] - self.coeff * x[:, :-1]
+        y[:, :1] = x[:, :1]
+        return y
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        if pred.dim() == 3:
+            pred = pred.squeeze(1)
+        if target.dim() == 3:
+            target = target.squeeze(1)
+        min_len = min(pred.shape[-1], target.shape[-1])
+        pred = pred[..., :min_len].float()
+        target = target[..., :min_len].float()
+        yp = self.preemph(pred)
+        yt = self.preemph(target)
+        return torch.mean(torch.abs(yp - yt))
 
 
 # --- Perceptual Loss (Log-Mel L1) ---

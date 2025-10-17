@@ -101,13 +101,29 @@ class TCNBlock(nn.Module):
         return identity + res, skip
 
 class ConvTasNet(nn.Module):
-    def __init__(self, enc_dim=512, win_len=16, num_spk=1, num_layers=3, num_blocks=8, conv_channels=512, kernel_size=3, skip_channels=None, mask_activation: str = 'sigmoid'):
+    def __init__(
+        self,
+        enc_dim=512,
+        win_len=16,
+        num_spk=1,
+        num_layers=3,
+        num_blocks=8,
+        conv_channels=512,
+        kernel_size=3,
+        skip_channels=None,
+        mask_activation: str = 'sigmoid',
+        use_refiner: bool = False,
+        refiner_channels: int = 32,
+        use_skip_gates: bool = False,
+    ):
         super(ConvTasNet, self).__init__()
         self.enc_dim = enc_dim
         self.win_len = win_len
         self.num_spk = num_spk
         self.skip_channels = enc_dim if skip_channels is None else int(skip_channels)
         self.mask_activation = mask_activation.lower()
+        self.use_refiner = bool(use_refiner)
+        self.use_skip_gates = bool(use_skip_gates)
 
         self.encoder = nn.Conv1d(1, enc_dim, win_len, bias=False, stride=win_len // 2)
         # gLN으로 교체: 입력 (B, C, T) 그대로 처리
@@ -117,10 +133,16 @@ class ConvTasNet(nn.Module):
         # Use a global cumulative dilation schedule across layers/blocks
         # This increases receptive field without changing parameter count.
         self.tcn_blocks = nn.ModuleList()
-        global_idx = 0
         for _ in range(num_layers):
             for i in range(num_blocks):
                 self.tcn_blocks.append(TCNBlock(enc_dim, conv_channels, kernel_size, dilation=2**i, skip_channels=self.skip_channels))
+
+        # Optional learnable positive gates for each skip connection
+        if self.use_skip_gates:
+            # initialize near-zero so early training isn't dominated
+            self.skip_gates = nn.Parameter(torch.zeros(len(self.tcn_blocks), dtype=torch.float32))
+        else:
+            self.register_parameter('skip_gates', None)
 
         # mask는 skip 경로의 피처를 사용해 예측합니다 (더 가벼운 skip로 파라미터 절약)
         self.mask_conv = nn.Conv1d(self.skip_channels, num_spk * enc_dim, 1)
@@ -129,7 +151,6 @@ class ConvTasNet(nn.Module):
         # Lightweight time-domain residual post-refiner (very small parameter increase)
         # Simple structure: Conv1d(1 -> refiner_channels, k=3) -> PReLU -> Conv1d(refiner_channels -> 1, k=1)
         # Applied as decoded + alpha * refiner(decoded) where alpha is a small learnable scalar.
-        self.use_refiner = use_refiner
         if self.use_refiner:
             # deeper but still lightweight refiner: two 1D conv layers to model fine residual corrections
             class RefinerBlock(nn.Module):
@@ -150,7 +171,7 @@ class ConvTasNet(nn.Module):
                     out = self.conv3(h)
                     return out
 
-            self.refiner = RefinerBlock(1, refiner_channels)
+            self.refiner = RefinerBlock(1, int(refiner_channels))
             # small initialized scale to avoid destabilizing pre-trained weights
             self.refiner_scale = nn.Parameter(torch.tensor(0.1, dtype=torch.float32))
 
@@ -167,8 +188,9 @@ class ConvTasNet(nn.Module):
         for i, block in enumerate(self.tcn_blocks):
             tcn_output, skip = block(tcn_output)
             # ensure positive gating; softplus keeps it >0 and is smooth
-            gate = F.softplus(self.skip_gates[i])
-            skip = skip * gate
+            if self.skip_gates is not None:
+                gate = F.softplus(self.skip_gates[i])
+                skip = skip * gate
             if skip_sum is None:
                 skip_sum = skip
             else:

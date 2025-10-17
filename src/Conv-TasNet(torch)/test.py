@@ -82,6 +82,32 @@ def test(config):
     model_g.eval()
     print(f"'{best_model_path}'에서 최고 성능 모델을 로드했습니다.")
 
+    # --- 모델 파라미터 크기 출력 ---
+    # Generator 파라미터
+    num_params_g = sum(p.numel() for p in model_g.parameters())
+    num_trainable_g = sum(p.numel() for p in model_g.parameters() if p.requires_grad)
+    print(f"Generator 전체 파라미터 수: {num_params_g:,}")
+    print(f"Generator 학습 가능한 파라미터 수: {num_trainable_g:,}")
+
+    # Discriminator 파라미터 (있을 경우)
+    model_d = None
+    if 'model_d_state_dict' in checkpoint:
+        # Discriminator 구조가 model.py에 정의되어 있다고 가정
+        try:
+            from model import Discriminator
+            model_d_config = checkpoint['config'].get('discriminator_params', {})
+            model_d = Discriminator(**model_d_config).to(device)
+            model_d.load_state_dict(checkpoint['model_d_state_dict'])
+            num_params_d = sum(p.numel() for p in model_d.parameters())
+            num_trainable_d = sum(p.numel() for p in model_d.parameters() if p.requires_grad)
+            print(f"Discriminator 전체 파라미터 수: {num_params_d:,}")
+            print(f"Discriminator 학습 가능한 파라미터 수: {num_trainable_d:,}")
+        except Exception as e:
+            print("Discriminator 모델 구조를 불러오지 못했습니다.")
+            print(e)
+    else:
+        print("Discriminator state_dict가 체크포인트에 없습니다. Generator만 출력합니다.")
+
     # --- 4. 평가 루프 ---
     total_pesq, total_stoi, total_si_sdr = 0, 0, 0
     total_pesq_orig, total_stoi_orig, total_si_sdr_orig = 0, 0, 0
@@ -203,8 +229,8 @@ if __name__ == '__main__':
     # train.py의 CONFIG와 동일한 설정을 사용합니다.
     # 필요한 부분만 가져오거나 train.py에서 CONFIG를 import 할 수도 있습니다.
     TEST_CONFIG = {
-        "output_root": "convtasnet_train_100epoch_conv96_pesq_scratch",
-        "checkpoint_path": "convtasnet_train_100epoch_conv96_pesq_scratch/checkpoints/best_model.pth",  # 명시적 경로 지정
+        "output_root": "convtasnet_v5_sigmoid16_conv144_skip96_mod1",  # 실험 폴더
+        "checkpoint_path": "convtasnet_v5_sigmoid16_conv144_skip96_mod1/checkpoints/best_model.pth",  # 명시적 경로 지정
         "dataset_dir": "dataset", 
         "test_csv": "diagnostics_test/normalized.csv",  # 직접 지정 시 사용. 예: "diagnostics_test/normalized.csv"
         "sample_rate": 16000,

@@ -11,7 +11,7 @@ from model import ConvTasNet, Discriminator
 from dataset import DenoisingDataset
 from utils import (set_seed, calculate_metrics, save_checkpoint, 
                    load_checkpoint, save_sample_audios, save_spectrogram_images, MRSTFTLoss,
-                   LogMelPerceptualLoss, smooth_labels, si_sdr_loss_torchmetrics)
+                   LogMelPerceptualLoss, smooth_labels, si_sdr_loss_torchmetrics, PreEmphasisLoss)
 # preprocess.py는 직접 임포트하지 않고, 스크립트로 별도 실행합니다.
 
 # ==============================================================================
@@ -20,12 +20,12 @@ from utils import (set_seed, calculate_metrics, save_checkpoint,
 # ==============================================================================
 CONFIG = {
     # --- 경로 설정 ---
-    "output_root": "convtasnet_lightweighted_v3_mmm",
+    "output_root": "convtasnet_v5_sigmoid16_conv144_skip96_mod1",
     # preprocess.py가 생성한 CSV 파일들이 있는 디렉토리
     "dataset_dir": "dataset", 
     "train_csv": "diagnostics_train/normalized.csv",         # 직접 지정 시 사용. 예: "diagnostics_train/normalized.csv"
     "val_csv": "diagnostics_val/normalized.csv",           # 직접 지정 시 사용. 예: "diagnostics_val/normalized.csv"
-    "resume_checkpoint": "convtasnet_lightweighted_v3_mmm/checkpoints/checkpoint.pth",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
+    "resume_checkpoint": "",  # 예: "training_output/checkpoints/checkpoint_epoch_10.pth"
     "fine_tuning_checkpoint": "", # 예: "path/to/pretrained_model.pth"
     # --- 파인튜닝 전용 옵션 ---
     "is_finetune": False,             # 파인튜닝 모드 활성화
@@ -36,7 +36,7 @@ CONFIG = {
     # --- 학습 하이퍼파라미터 ---
     "seed": 42,
     "epochs": 100,
-    "batch_size": 16,
+    "batch_size": 8,
     "learning_rate_g": 5e-5,
     "learning_rate_d": 2e-4,
     # 파인튜닝 권장 학습률 (is_finetune=True일 때 아래 값을 사용)
@@ -53,38 +53,43 @@ CONFIG = {
     "pin_memory": True,
     # 작은 데이터셋 파인튜닝 시, 에포크당 업데이트 수를 늘리고 싶다면 설정
     # 0이면 비활성화, N>0이면 에포크마다 N 스텝이 되도록 샘플러가 중복 추출합니다.
-    "steps_per_epoch": 200,
+    "steps_per_epoch": 400,
 
     # --- 오디오 속성 ---
     "sample_rate": 16000,
-    "segment_duration": 2, # 초 단위, 학습 시 사용할 오디오 조각 길이
+    "segment_duration": 3, # 초 단위, 학습 시 사용할 오디오 조각 길이
 
     # segment_len: 샘플 단위 길이 (테스트의 overlap-add에서 사용 가능)
-    "segment_len": 16000 * 2,
+    "segment_len": 16000 * 3,
 
     # --- 모델 구조 ---
     "model_params": {
         "enc_dim": 128,
-        "win_len": 32,
+        "win_len": 16,
         "num_spk": 1,
         "num_layers": 2,
         "num_blocks": 6,
-        "conv_channels": 128,
+    "conv_channels": 144,
         "kernel_size": 3,
-        "skip_channels": 64,
-        "mask_activation": "relu",
+    "skip_channels": 96,
+        "mask_activation": "sigmoid",
+        "use_refiner": True,
+        "refiner_channels": 32,
+        # "use_skip_gates": True
     },
+    # "skip_gates_init": True,
+    # "skip_gates_init_value": 0.1,  # skip gate 초기값 설정 (예: 0.0)
 
     # --- 손실 함수 가중치 ---
-    "use_adv": True,     # GAN 손실 사용 여부
+    "use_adv": False,     # GAN 손실 사용 여부
     "use_stft": True,    # MR-STFT 손실 사용 여부
     "use_perc": True,    # Perceptual(Log-Mel) 손실 사용 여부
 
     "lambda_adv": 0.005,  # GAN 손실 가중치
     "adv_warmup_epochs": 8, # N 에포크까지 0.0, 이후 자동으로 켜짐
     "lambda_sdr": 2.0,   # SI-SDR loss 가중치
-    "lambda_stft": 1.2,  # MR-STFT loss 가중치 (PESQ 개선 유도)
-    "lambda_perc": 1.0,  # Perceptual (Log-Mel) loss 가중치 (청감 품질 강화)
+    "lambda_stft": 1.0,  # MR-STFT loss 가중치 (PESQ 개선 유도)
+    "lambda_perc": 0.8,  # Perceptual (Log-Mel) loss 가중치 (청감 품질 강화)
 
     "lr_scheduler": {
         "type": "cosine",      # 스케줄러 타입을 'cosine'으로 지정
@@ -94,8 +99,8 @@ CONFIG = {
 
     # --- 체크포인트 저장/모니터링 기준 ---
     # monitor_metric: 'val_loss' (lower better) 또는 'pesq'/'stoi'/'si_sdr' (higher better)
-    "monitor_metric": "val_loss",
-    "monitor_mode": "min",  # 'min' 또는 'max' (기본은 val_loss에 대해 'min')
+    "monitor_metric": "pesq",
+    "monitor_mode": "max",  # 'min' 또는 'max' (기본은 val_loss에 대해 'min')
 
     # --- 로깅 및 저장 ---
     "save_interval": 5, # N 에포크마다 체크포인트 저장
@@ -217,7 +222,10 @@ def main(config):
     adversarial_loss = nn.MSELoss().to(device)
     # Prefer torchmetrics SI-SDR for stable gradients; keep shift-invariant available if needed
     reconstruction_loss = si_sdr_loss_torchmetrics
-    mrstft_loss = MRSTFTLoss().to(device)
+    # High-frequency weighted MR-STFT to better preserve fricatives/plosives
+    mrstft_loss = MRSTFTLoss(sr=config['sample_rate'], freq_weighting='hf', hf_cutoff_hz=4000.0, hf_boost=1.25, hf_alpha=1.25).to(device)
+    # Pre-emphasis L1 loss to reduce crackling and preserve HF transients
+    preemph_loss = PreEmphasisLoss(coeff=0.97).to(device)
     perc_loss_fn = LogMelPerceptualLoss(sr=config['sample_rate']).to(device)
 
     # --- [성능 가속화 & 경고 수정] AMP GradScaler 초기화 ---
@@ -231,7 +239,9 @@ def main(config):
 
     # --- 4. 체크포인트 로드 (재개 또는 미세조정) ---
     start_epoch = 0
-    best_val_loss = float('inf')
+    # Initialize best score according to monitor mode
+    _monitor_mode = config.get('monitor_mode', 'min')
+    best_val_loss = float('-inf') if _monitor_mode == 'max' else float('inf')
     
     if config['resume_checkpoint']:
         start_epoch, best_val_loss = load_checkpoint(
@@ -339,7 +349,10 @@ def main(config):
             w_perc = (config['lambda_perc'] if (config.get('use_perc', True) and not (config.get('is_finetune', False) and epoch < config.get('disable_perc_epochs', 0))) else 0.0)
             w_adv = (0.0 if (config.get('is_finetune', False) and epoch < config.get('disable_d_epochs', 0)) else (config['lambda_adv'] if config.get('use_adv', True) else 0.0))
 
-            g_loss = (w_sdr * loss_sdr + w_stft * loss_stft + w_perc * loss_perc + w_adv * loss_adv)
+            # Small pre-emphasis loss weight to suppress crackling and preserve HF
+            w_pre = 0.1
+            loss_pre = preemph_loss(denoised_wav, clean)
+            g_loss = (w_sdr * loss_sdr + w_stft * loss_stft + w_perc * loss_perc + w_adv * loss_adv + w_pre * loss_pre)
 
             # 비정상 손실 방지: NaN/Inf면 배치 스킵
             g_loss = g_loss.to(torch.float32)
@@ -429,17 +442,33 @@ def main(config):
         
         new_log = {'epoch': epoch, 'train_g_loss': avg_train_g_loss, 'train_d_loss': avg_train_d_loss, 'val_loss': avg_val_loss, 'pesq': avg_pesq, 'stoi': avg_stoi, 'si_sdr': avg_si_sdr}
         log_df = pd.concat([log_df, pd.DataFrame([new_log])], ignore_index=True); log_df.to_csv(log_file, index=False)
-        
-        is_best = avg_val_loss < best_val_loss
-        if is_best: best_val_loss = avg_val_loss; patience_counter = 0
-        else: patience_counter += 1
+
+        # Determine monitored metric
+        monitor_metric = config.get('monitor_metric', 'val_loss')
+        monitor_mode = config.get('monitor_mode', 'min')
+        current_monitor = avg_val_loss
+        if monitor_metric == 'pesq':
+            current_monitor = avg_pesq
+        elif monitor_metric == 'stoi':
+            current_monitor = avg_stoi
+        elif monitor_metric == 'si_sdr':
+            current_monitor = avg_si_sdr
+        is_best = (current_monitor > best_val_loss) if monitor_mode == 'max' else (current_monitor < best_val_loss)
+        if is_best:
+            best_val_loss = current_monitor
+            patience_counter = 0
+        else:
+            patience_counter += 1
 
         checkpoint_state = {'epoch': epoch, 'model_g_state_dict': model_g.state_dict(), 'model_d_state_dict': model_d.state_dict(), 'optimizer_g_state_dict': optimizer_g.state_dict(), 'optimizer_d_state_dict': optimizer_d.state_dict(), 'best_val_loss': best_val_loss, 'config': config}
-        if epoch % config['save_interval'] == 0: save_checkpoint(checkpoint_state, False, chkpt_dir, f'checkpoint_epoch_{epoch}.pth')
-        if is_best: save_checkpoint(checkpoint_state, True, chkpt_dir)
+        if epoch % config['save_interval'] == 0:
+            save_checkpoint(checkpoint_state, False, chkpt_dir, f'checkpoint_epoch_{epoch}.pth')
+        if is_best:
+            save_checkpoint(checkpoint_state, True, chkpt_dir)
 
         if patience_counter >= config['early_stopping_patience']:
-            print(f"{config['early_stopping_patience']} 에포크 동안 성능 개선이 없어 조기 종료합니다."); break
+            print(f"{config['early_stopping_patience']} 에포크 동안 성능 개선이 없어 조기 종료합니다.")
+            break
 
     print(f"\n학습 완료. 최고 검증 손실: {best_val_loss:.4f}");
 
